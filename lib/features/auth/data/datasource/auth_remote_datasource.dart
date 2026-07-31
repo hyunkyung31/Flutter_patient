@@ -1,5 +1,9 @@
-Future<LoginResponse> loginWithKakao();
+import '../model/login_response.dart';
 
-Future<LoginResponse> refreshToken();
+abstract class AuthRemoteDataSource {
+  Future<LoginResponse> loginWithKakao();
 
-Future<void> logout();
+  Future<LoginResponse> refreshToken();
+
+  Future<void> logout();
+}
