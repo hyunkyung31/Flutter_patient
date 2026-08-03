@@ -1,4 +1,5 @@
 class ApiEndpoints {
-  static const String kakaoLogin = '/auth/kakao/login';
-  static const String refresh = '/auth/refresh';
+  // Must match Django: path("api/auth/kakao/login/", ...)
+  static const String kakaoLogin = '/api/auth/kakao/login/';
+  static const String refresh = '/api/token/refresh/';
 }
