@@ -5,19 +5,47 @@ plugins {
 }
 
 fun readKakaoNativeAppKey(): String {
-    val envFile = rootProject.file("../.env")
-    if (!envFile.exists()) return ""
+    // 1) android/local.properties (gitignored)
+    val localProperties = rootProject.file("local.properties")
+    if (localProperties.exists()) {
+        val fromLocal = localProperties.readLines()
+            .map { it.trim() }
+            .firstOrNull { !it.startsWith("#") && it.startsWith("kakao.native.app.key=") }
+            ?.substringAfter("=")
+            ?.trim()
+            ?.trim('"')
+            .orEmpty()
+        if (fromLocal.isNotEmpty()) return fromLocal
+    }
 
-    return envFile.readLines()
-        .map { it.trim() }
-        .firstOrNull { !it.startsWith("#") && it.startsWith("KAKAO_NATIVE_APP_KEY=") }
-        ?.substringAfter("=")
-        ?.trim()
-        ?.trim('"')
-        .orEmpty()
+    // 2) project root .env (gitignored, used by flutter_dotenv)
+    val envFile = rootProject.file("../.env")
+    if (envFile.exists()) {
+        val fromEnv = envFile.readLines()
+            .map { it.trim() }
+            .firstOrNull { !it.startsWith("#") && it.startsWith("KAKAO_NATIVE_APP_KEY=") }
+            ?.substringAfter("=")
+            ?.trim()
+            ?.trim('"')
+            .orEmpty()
+        if (fromEnv.isNotEmpty()) return fromEnv
+    }
+
+    return ""
 }
 
 val kakaoNativeAppKey = readKakaoNativeAppKey()
+if (kakaoNativeAppKey.isBlank()) {
+    throw GradleException(
+        """
+        Missing Kakao native app key for Android redirect scheme.
+        Set one of (do NOT commit secrets):
+          - android/local.properties -> kakao.native.app.key=YOUR_KEY
+          - project root .env -> KAKAO_NATIVE_APP_KEY=YOUR_KEY
+        Then run a full rebuild: flutter clean && flutter run
+        """.trimIndent()
+    )
+}
 
 android {
     namespace = "com.vena.patient_app"
@@ -38,9 +66,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        // Kakao redirect scheme: kakao{NATIVE_APP_KEY}
-        // Must match KAKAO_NATIVE_APP_KEY in the project .env file.
-        // Also register this applicationId + key hash in Kakao Developers Console.
+        // Becomes kakao{NATIVE_APP_KEY}. Key is read from gitignored local files.
         manifestPlaceholders["kakaoScheme"] = "kakao$kakaoNativeAppKey"
     }
 
