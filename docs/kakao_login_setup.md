@@ -26,9 +26,8 @@ Register:
 - Android package name: `com.vena.patient_app`
 - Debug/release key hash
 
-In debug builds the app prints:
-`Kakao key hash (KakaoSdk.origin): ...`
-Copy that exact value into the Console key hash field.
+Register the Android debug/release key hash in Kakao Developers Console.
+(If needed, generate the debug key hash with `keytool` as in the Kakao docs.)
 
 ## Backend
 Flutter exchanges the Kakao access token with:

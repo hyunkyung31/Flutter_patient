@@ -45,9 +45,6 @@ class KakaoAuthService implements AuthRemoteDataSource {
   }
 
   Future<OAuthToken> _loginWithKakaoSdk() async {
-    // Register this value in Kakao Developers Console > Android key hash.
-    debugPrint('Kakao key hash (KakaoSdk.origin): ${await KakaoSdk.origin}');
-
     final installed = await isKakaoTalkInstalled();
     debugPrint('KakaoTalk installed: $installed');
 
