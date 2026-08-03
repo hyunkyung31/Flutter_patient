@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../widgets/kakao_login_button.dart';
 import '../../data/datasource/kakao_auth_service.dart';
 import 'package:patient_app/core/storage/secure_storage.dart';
+import 'signup_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -28,9 +29,15 @@ class _LoginPageState extends State<LoginPage> {
 
       // 신규 회원
       if (result.isNewUser) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('신규 회원입니다. 회원가입을 진행해주세요.'),
+        final signupToken = result.signupToken;
+        if (signupToken == null || signupToken.isEmpty) {
+          _showLoginError('회원가입 토큰이 없습니다. 서버 응답을 확인해주세요.');
+          return;
+        }
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => SignupPage(signupToken: signupToken),
           ),
         );
         return;
@@ -44,9 +51,9 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('로그인 성공')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('로그인 성공')));
 
       // Navigator.pushReplacement(
       //   context,
@@ -78,10 +85,7 @@ class _LoginPageState extends State<LoginPage> {
   void _showLoginError(String message) {
     debugPrint('Login error: $message');
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        duration: const Duration(seconds: 8),
-        content: Text(message),
-      ),
+      SnackBar(duration: const Duration(seconds: 8), content: Text(message)),
     );
   }
 

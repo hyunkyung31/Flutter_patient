@@ -100,6 +100,43 @@ class KakaoAuthService implements AuthRemoteDataSource {
   }
 
   @override
+  Future<LoginResponse> signupWithKakao({
+    required String signupToken,
+    required String phone,
+    required String birthDate,
+    String? name,
+  }) async {
+    final requestUrl = '${AppConfig.apiBaseUrl}${ApiEndpoints.kakaoSignup}';
+    debugPrint('Backend signup request: POST $requestUrl');
+  
+    try {
+      final response = await ApiClient.dio.post(
+        ApiEndpoints.kakaoSignup,
+        data: {
+          'signupToken': signupToken,
+          'phone': phone,
+          'birthDate': birthDate,
+          if (name != null && name.isNotEmpty) 'name': name,
+        },
+      );
+  
+      final data = response.data;
+      if (data is! Map) {
+        throw Exception('서버 응답 형식이 올바르지 않습니다. (${data.runtimeType})');
+      }
+  
+      return LoginResponse.fromJson(Map<String, dynamic>.from(data));
+    } on DioException catch (e) {
+      debugPrint(
+        'Kakao signup failed: type=${e.type}, '
+        'status=${e.response?.statusCode}, url=$requestUrl, '
+        'data=${e.response?.data}',
+      );
+      throw Exception(_mapDioError(e, requestUrl));
+    }
+  }
+
+  @override
   Future<void> logout() async {
     await UserApi.instance.logout();
   }

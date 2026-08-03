@@ -4,6 +4,7 @@ class LoginResponse {
   final String? patientId;
   final String? patientName;
   final bool isNewUser;
+  final String? signupToken;
 
   LoginResponse({
     required this.access,
@@ -11,15 +12,17 @@ class LoginResponse {
     this.patientId,
     this.patientName,
     required this.isNewUser,
+    this.signupToken,
   });
 
   factory LoginResponse.fromJson(Map<String, dynamic> json) {
     return LoginResponse(
-      access: json['access'] ?? "",
-      refresh: json['refresh'] ?? "",
-      patientId: json["patient_id"],
-      patientName: json["patient_name"],
-      isNewUser: json['is_new_user'] ?? false,
+      access: json['access']?.toString() ?? "",
+      refresh: json['refresh']?.toString() ?? "",
+      patientId: json["patient_id"]?.toString(),
+      patientName: json["patient_name"]?.toString(),
+      isNewUser: json['is_new_user'] == true,
+      signupToken: json['signup_token']?.toString(),
     );
   }
 }
