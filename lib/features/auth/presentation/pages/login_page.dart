@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -57,11 +56,10 @@ class _LoginPageState extends State<LoginPage> {
       // );
     } on PlatformException catch (e) {
       if (!mounted || e.code == 'CANCELED') return;
-      _showLoginError('카카오 로그인에 실패했습니다.');
+      _showLoginError('카카오 로그인 실패\ncode=${e.code}\n${e.message}');
     } catch (e) {
       if (!mounted) return;
-      final message = _userFacingMessage(e);
-      _showLoginError(message);
+      _showLoginError(_userFacingMessage(e));
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -71,7 +69,7 @@ class _LoginPageState extends State<LoginPage> {
 
   String _userFacingMessage(Object error) {
     final raw = error.toString().replaceFirst('Exception: ', '');
-    if (raw.isEmpty || raw == error.runtimeType.toString()) {
+    if (raw.isEmpty) {
       return '로그인에 실패했습니다. 다시 시도해주세요.';
     }
     return raw;
@@ -81,9 +79,8 @@ class _LoginPageState extends State<LoginPage> {
     debugPrint('Login error: $message');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          kDebugMode ? message : '로그인에 실패했습니다. 다시 시도해주세요.',
-        ),
+        duration: const Duration(seconds: 8),
+        content: Text(message),
       ),
     );
   }

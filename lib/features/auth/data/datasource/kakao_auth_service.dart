@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_endpoints.dart';
 import 'auth_remote_datasource.dart';
@@ -12,6 +13,10 @@ class KakaoAuthService implements AuthRemoteDataSource {
   @override
   Future<LoginResponse> loginWithKakao() async {
     final token = await _loginWithKakaoSdk();
+    debugPrint('Kakao SDK login success');
+
+    final requestUrl = '${AppConfig.apiBaseUrl}${ApiEndpoints.kakaoLogin}';
+    debugPrint('Backend login request: POST $requestUrl');
 
     try {
       final response = await ApiClient.dio.post(
@@ -22,31 +27,36 @@ class KakaoAuthService implements AuthRemoteDataSource {
       );
 
       final data = response.data;
-      if (data is! Map<String, dynamic>) {
-        throw Exception('서버 응답 형식이 올바르지 않습니다.');
+      if (data is! Map) {
+        throw Exception(
+          '서버 응답 형식이 올바르지 않습니다. (${data.runtimeType})',
+        );
       }
 
-      return LoginResponse.fromJson(data);
+      return LoginResponse.fromJson(Map<String, dynamic>.from(data));
     } on DioException catch (e) {
-      debugPrint('Kakao backend login failed: type=${e.type}, status=${e.response?.statusCode}');
-      throw Exception(_mapDioError(e));
+      debugPrint(
+        'Kakao backend login failed: type=${e.type}, '
+        'status=${e.response?.statusCode}, url=$requestUrl, '
+        'data=${e.response?.data}',
+      );
+      throw Exception(_mapDioError(e, requestUrl));
     }
   }
 
   Future<OAuthToken> _loginWithKakaoSdk() async {
-    if (kDebugMode) {
-      // Register this value in Kakao Developers Console > Android key hash.
-      debugPrint('Kakao key hash (KakaoSdk.origin): ${await KakaoSdk.origin}');
-    }
+    // Register this value in Kakao Developers Console > Android key hash.
+    debugPrint('Kakao key hash (KakaoSdk.origin): ${await KakaoSdk.origin}');
 
     final installed = await isKakaoTalkInstalled();
+    debugPrint('KakaoTalk installed: $installed');
 
     if (!installed) {
       try {
         return await UserApi.instance.loginWithKakaoAccount();
       } catch (e) {
         debugPrint('Kakao account login failed: $e');
-        throw Exception('카카오 로그인에 실패했습니다.');
+        throw Exception('카카오 계정 로그인 실패: $e');
       }
     }
 
@@ -61,29 +71,29 @@ class KakaoAuthService implements AuthRemoteDataSource {
         return await UserApi.instance.loginWithKakaoAccount();
       } catch (accountError) {
         debugPrint('Kakao account login failed: $accountError');
-        throw Exception('카카오 로그인에 실패했습니다.');
+        throw Exception('카카오 로그인 실패: $accountError');
       }
     } catch (e) {
       debugPrint('KakaoTalk login failed: $e');
-      throw Exception('카카오 로그인에 실패했습니다.');
+      throw Exception('카카오톡 로그인 실패: $e');
     }
   }
 
-  String _mapDioError(DioException e) {
+  String _mapDioError(DioException e, String requestUrl) {
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
       case DioExceptionType.connectionError:
-        return '서버에 연결할 수 없습니다. API_BASE_URL을 확인해주세요.';
+        return '서버 연결 실패\n$requestUrl\nAPI_BASE_URL을 확인해주세요.';
       case DioExceptionType.badResponse:
         final data = e.response?.data;
         if (data is Map && data['message'] != null) {
-          return data['message'].toString();
+          return '서버 로그인 실패 (${e.response?.statusCode})\n${data['message']}';
         }
-        return '서버 로그인에 실패했습니다. (${e.response?.statusCode ?? 'error'})';
+        return '서버 로그인 실패 (${e.response?.statusCode})\n$requestUrl';
       default:
-        return '서버 로그인에 실패했습니다.';
+        return '서버 로그인 실패\n$requestUrl\n${e.message ?? e.type}';
     }
   }
 
