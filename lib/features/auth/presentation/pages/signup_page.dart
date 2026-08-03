@@ -36,6 +36,13 @@ class _SignupPageState extends State<SignupPage> {
     final birthDate = _birthController.text.trim();
     final name = _nameController.text.trim();
 
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('이름을 입력해주세요.')),
+      );
+      return;
+    }
+
     if (phone.isEmpty || birthDate.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('전화번호와 생년월일을 입력해주세요.')),
@@ -48,9 +55,9 @@ class _SignupPageState extends State<SignupPage> {
     try {
       final result = await _authService.signupWithKakao(
         signupToken: widget.signupToken,
-        phone: phone,
+        phone: phone, // service에서 숫자만 정규화
         birthDate: birthDate,
-        name: name.isEmpty ? null : name,
+        name: name,
       );
 
       await SecureStorageService.saveToken(
