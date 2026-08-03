@@ -30,18 +30,9 @@ class _LoginPageState extends State<LoginPage> {
       if (result.isNewUser) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("신규 회원입니다. 회원가입을 진행해주세요."),
+            content: Text('신규 회원입니다. 회원가입을 진행해주세요.'),
           ),
         );
-
-        // TODO
-        // Navigator.push(
-        //   context,
-        //   MaterialPageRoute(
-        //     builder: (_) => const SignupPage(),
-        //   ),
-        // );
-
         return;
       }
 
@@ -53,6 +44,10 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
 
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('로그인 성공')),
+      );
+
       // Navigator.pushReplacement(
       //   context,
       //   MaterialPageRoute(
@@ -61,21 +56,33 @@ class _LoginPageState extends State<LoginPage> {
       // );
     } on PlatformException catch (e) {
       if (!mounted || e.code == 'CANCELED') return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("로그인에 실패했습니다. 다시 시도해주세요.")),
-      );
-    } catch (_) {
+      _showLoginError('카카오 로그인 실패\ncode=${e.code}\n${e.message}');
+    } catch (e) {
       if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("로그인에 실패했습니다. 다시 시도해주세요.")),
-      );
+      _showLoginError(_userFacingMessage(e));
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  String _userFacingMessage(Object error) {
+    final raw = error.toString().replaceFirst('Exception: ', '');
+    if (raw.isEmpty) {
+      return '로그인에 실패했습니다. 다시 시도해주세요.';
+    }
+    return raw;
+  }
+
+  void _showLoginError(String message) {
+    debugPrint('Login error: $message');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 8),
+        content: Text(message),
+      ),
+    );
   }
 
   @override
@@ -90,7 +97,7 @@ class _LoginPageState extends State<LoginPage> {
               const Icon(Icons.favorite, size: 90, color: Colors.red),
               const SizedBox(height: 20),
               const Text(
-                "AI 기반 심혈관 건강관리",
+                'AI 기반 심혈관 건강관리',
                 style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 80),

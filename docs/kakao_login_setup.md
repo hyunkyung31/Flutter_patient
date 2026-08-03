@@ -26,6 +26,18 @@ Register:
 - Android package name: `com.vena.patient_app`
 - Debug/release key hash
 
+Register the Android debug/release key hash in Kakao Developers Console.
+(If needed, generate the debug key hash with `keytool` as in the Kakao docs.)
+
+## Backend
+Flutter exchanges the Kakao access token with:
+
+- `POST {API_BASE_URL}/api/auth/kakao/login/`
+- body: `{ "accessToken": "<kakao-access-token>" }`
+
+If confirm succeeds but the app shows a server connection error, check `.env` `API_BASE_URL`.
+If it shows 404, confirm the Django route is exactly `api/auth/kakao/login/`.
+
 ## Rebuild
 Manifest/scheme changes require a full rebuild:
 
