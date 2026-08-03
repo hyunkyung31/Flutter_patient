@@ -10,7 +10,7 @@ Future<void> main() async {
 
   await dotenv.load(fileName: ".env");
 
-  KakaoSdk.init(nativeAppKey: AppConfig.kakaoNativeAppKey);
+  await KakaoSdk.init(nativeAppKey: AppConfig.kakaoNativeAppKey);
 
   runApp(const MyApp());
 }
