@@ -26,6 +26,18 @@ Register:
 - Android package name: `com.vena.patient_app`
 - Debug/release key hash
 
+In debug builds the app prints:
+`Kakao key hash (KakaoSdk.origin): ...`
+Copy that exact value into the Console key hash field.
+
+## Backend
+Flutter exchanges the Kakao access token with:
+
+- `POST {API_BASE_URL}/auth/kakao/login`
+- body: `{ "accessToken": "<kakao-access-token>" }`
+
+If confirm succeeds but the app shows a server connection error, check `.env` `API_BASE_URL`.
+
 ## Rebuild
 Manifest/scheme changes require a full rebuild:
 
