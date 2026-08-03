@@ -4,6 +4,21 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+fun readKakaoNativeAppKey(): String {
+    val envFile = rootProject.file("../.env")
+    if (!envFile.exists()) return ""
+
+    return envFile.readLines()
+        .map { it.trim() }
+        .firstOrNull { !it.startsWith("#") && it.startsWith("KAKAO_NATIVE_APP_KEY=") }
+        ?.substringAfter("=")
+        ?.trim()
+        ?.trim('"')
+        .orEmpty()
+}
+
+val kakaoNativeAppKey = readKakaoNativeAppKey()
+
 android {
     namespace = "com.vena.patient_app"
     compileSdk = flutter.compileSdkVersion
@@ -23,6 +38,10 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Kakao redirect scheme: kakao{NATIVE_APP_KEY}
+        // Must match KAKAO_NATIVE_APP_KEY in the project .env file.
+        // Also register this applicationId + key hash in Kakao Developers Console.
+        manifestPlaceholders["kakaoScheme"] = "kakao$kakaoNativeAppKey"
     }
 
     buildTypes {

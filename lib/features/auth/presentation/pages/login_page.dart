@@ -1,11 +1,82 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../widgets/kakao_login_button.dart';
 import '../../data/datasource/kakao_auth_service.dart';
 import 'package:patient_app/core/storage/secure_storage.dart';
 
-class LoginPage extends StatelessWidget {
+class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final KakaoAuthService _authService = KakaoAuthService();
+  bool _isLoading = false;
+
+  Future<void> _onKakaoLoginPressed() async {
+    if (_isLoading) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final result = await _authService.loginWithKakao();
+
+      if (!mounted) return;
+
+      // 신규 회원
+      if (result.isNewUser) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("신규 회원입니다. 회원가입을 진행해주세요."),
+          ),
+        );
+
+        // TODO
+        // Navigator.push(
+        //   context,
+        //   MaterialPageRoute(
+        //     builder: (_) => const SignupPage(),
+        //   ),
+        // );
+
+        return;
+      }
+
+      // 기존 회원
+      await SecureStorageService.saveToken(
+        access: result.access,
+        refresh: result.refresh,
+      );
+
+      if (!mounted) return;
+
+      // Navigator.pushReplacement(
+      //   context,
+      //   MaterialPageRoute(
+      //     builder: (_) => const HomePage(),
+      //   ),
+      // );
+    } on PlatformException catch (e) {
+      if (!mounted || e.code == 'CANCELED') return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("로그인에 실패했습니다. 다시 시도해주세요.")),
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("로그인에 실패했습니다. 다시 시도해주세요.")),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -16,82 +87,17 @@ class LoginPage extends StatelessWidget {
           child: Column(
             children: [
               const Spacer(),
-
               const Icon(Icons.favorite, size: 90, color: Colors.red),
-
               const SizedBox(height: 20),
-
               const Text(
                 "AI 기반 심혈관 건강관리",
                 style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
               ),
-
               const SizedBox(height: 80),
-
               KakaoLoginButton(
-                onPressed: () async {
-                  debugPrint("버튼클릭");
-                  try {
-                    final result = await KakaoAuthService().loginWithKakao();
-
-                    if (!context.mounted) return;
-
-                    // 신규 회원
-                    if (result.isNewUser) {
-                      debugPrint("신규 회원");
-
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("신규 회원입니다. 회원가입을 진행해주세요."),
-                        ),
-                      );
-
-                      // TODO
-                      // Navigator.push(
-                      //   context,
-                      //   MaterialPageRoute(
-                      //     builder: (_) => const SignupPage(),
-                      //   ),
-                      // );
-
-                      return;
-                    }
-
-                    // 기존 회원
-                    debugPrint("기존 회원 로그인");
-
-                    await SecureStorageService.saveToken(
-                      access: result.access,
-                      refresh: result.refresh,
-                    );
-
-                    debugPrint("로그인 성공");
-
-                    debugPrint("Access Token : ${result.access}");
-                    debugPrint("Refresh Token : ${result.refresh}");
-                    debugPrint("Patient ID : ${result.patientId}");
-                    debugPrint("Patient Name : ${result.patientName}");
-
-                    if (!context.mounted) return;
-
-                    // Navigator.pushReplacement(
-                    //   context,
-                    //   MaterialPageRoute(
-                    //     builder: (_) => const HomePage(),
-                    //   ),
-                    // );
-                  } catch (e) {
-                    debugPrint("로그인 실패 : $e");
-
-                    if (!context.mounted) return;
-
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text("로그인 실패\n$e")));
-                  }
-                },
+                onPressed: _isLoading ? null : _onKakaoLoginPressed,
+                isLoading: _isLoading,
               ),
-
               const SizedBox(height: 20),
             ],
           ),
