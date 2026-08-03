@@ -9,6 +9,13 @@ class RewardShopCard extends StatelessWidget {
     required this.isSpecialFlowerPlanted,
     required this.onBuyFlowerPot,
     required this.onPlantSpecialSeed,
+    required this.isButterflyDecorationEnabled,
+    required this.onToggleButterflyDecoration,
+    required this.onGoToGarden,
+    required this.hasSpringGardenBackground,
+    required this.isSpringGardenBackgroundEnabled,
+    required this.onBuySpringGardenBackground,
+    required this.onToggleSpringGardenBackground,
   });
 
   final int rewardPoint;
@@ -16,14 +23,27 @@ class RewardShopCard extends StatelessWidget {
 
   final bool hasPinkFlowerPot;
   final bool isSpecialFlowerPlanted;
+  final bool isButterflyDecorationEnabled;
+  final bool hasSpringGardenBackground;
+  final bool isSpringGardenBackgroundEnabled;
 
+  final VoidCallback onToggleButterflyDecoration;
   final VoidCallback onBuyFlowerPot;
   final VoidCallback onPlantSpecialSeed;
+  final VoidCallback onBuySpringGardenBackground;
+  final VoidCallback onToggleSpringGardenBackground;
+  final VoidCallback onGoToGarden;
 
   static const int flowerPotPrice = 50;
+  static const int springGardenBackgroundPrice = 100;
 
   bool get canBuyFlowerPot {
-    return rewardPoint >= flowerPotPrice && !hasPinkFlowerPot;
+    return !hasPinkFlowerPot && rewardPoint >= flowerPotPrice;
+  }
+
+  bool get canBuySpringGardenBackground {
+    return !hasSpringGardenBackground &&
+        rewardPoint >= springGardenBackgroundPrice;
   }
 
   bool get canPlantSpecialSeed {
@@ -73,21 +93,70 @@ class RewardShopCard extends StatelessWidget {
           const SizedBox(height: 20),
 
           _ShopItem(
-            icon: Icons.yard_rounded,
-            iconColor: const Color(0xFFE46A98),
+            icon: Icons.auto_awesome_rounded,
+            iconColor: const Color(0xFFE985A8),
             iconBackgroundColor: const Color(0xFFFFEAF1),
-            title: '분홍 꽃 화분',
-            description: '정원을 꾸밀 수 있는 새로운 화분이에요.',
+            title: '정원 나비 장식',
+            description: hasPinkFlowerPot
+                ? isButterflyDecorationEnabled
+                      ? '현재 건강 정원에 나비 장식이 적용되어 있어요.'
+                      : '구매한 나비 장식을 다시 정원에 적용할 수 있어요.'
+                : '건강 정원에 작은 나비들이 찾아와요.',
+
             priceText: hasPinkFlowerPot
-                ? '보유 중'
+                ? isButterflyDecorationEnabled
+                      ? '사용 중'
+                      : '보유 중'
                 : '${RewardShopCard.flowerPotPrice}P',
+
             buttonText: hasPinkFlowerPot
-                ? '구매 완료'
-                : canBuyFlowerPot
+                ? isButterflyDecorationEnabled
+                      ? '장식 숨기기'
+                      : '정원에 적용하기'
+                : rewardPoint >= RewardShopCard.flowerPotPrice
                 ? '포인트로 교환'
                 : '${RewardShopCard.flowerPotPrice - rewardPoint}P 부족',
-            isEnabled: canBuyFlowerPot,
-            onPressed: onBuyFlowerPot,
+
+            // 구매한 뒤에는 포인트와 상관없이 숨기기·적용하기 버튼 활성화
+            isEnabled: hasPinkFlowerPot ? true : canBuyFlowerPot,
+
+            // 구매 전에는 구매 메서드, 구매 후에는 표시 상태 변경 메서드 실행
+            onPressed: hasPinkFlowerPot
+                ? onToggleButterflyDecoration
+                : onBuyFlowerPot,
+          ),
+
+          const SizedBox(height: 12),
+
+          // 봄꽃 배경
+          _ShopItem(
+            icon: Icons.landscape_rounded,
+            iconColor: const Color(0xFF5FA77A),
+            iconBackgroundColor: const Color(0xFFE7F6EC),
+            title: '봄꽃 정원 배경',
+            description: hasSpringGardenBackground
+                ? isSpringGardenBackgroundEnabled
+                      ? '현재 건강 정원에 봄꽃 배경이 적용되어 있어요.'
+                      : '구매한 봄꽃 배경을 다시 정원에 적용할 수 있어요.'
+                : '화사한 꽃과 나무가 가득한 봄 정원으로 꾸며요.',
+            priceText: hasSpringGardenBackground
+                ? isSpringGardenBackgroundEnabled
+                      ? '사용 중'
+                      : '보유 중'
+                : '${RewardShopCard.springGardenBackgroundPrice}P',
+            buttonText: hasSpringGardenBackground
+                ? isSpringGardenBackgroundEnabled
+                      ? '기본 배경으로 변경'
+                      : '봄꽃 배경 적용'
+                : rewardPoint >= RewardShopCard.springGardenBackgroundPrice
+                ? '포인트로 교환'
+                : '${RewardShopCard.springGardenBackgroundPrice - rewardPoint}P 부족',
+            isEnabled: hasSpringGardenBackground
+                ? true
+                : canBuySpringGardenBackground,
+            onPressed: hasSpringGardenBackground
+                ? onToggleSpringGardenBackground
+                : onBuySpringGardenBackground,
           ),
 
           const SizedBox(height: 12),
@@ -106,6 +175,28 @@ class RewardShopCard extends StatelessWidget {
                 : '특별 씨앗이 필요해요',
             isEnabled: canPlantSpecialSeed,
             onPressed: onPlantSpecialSeed,
+          ),
+
+          const SizedBox(height: 20),
+
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onGoToGarden,
+              icon: const Icon(Icons.park_rounded, size: 21),
+              label: const Text(
+                '정원으로 가기',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF7F67B5),
+                side: const BorderSide(color: Color(0xFFBBA9DE), width: 1.4),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
           ),
         ],
       ),
