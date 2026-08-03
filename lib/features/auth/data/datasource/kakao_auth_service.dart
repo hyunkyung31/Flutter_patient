@@ -76,7 +76,11 @@ class KakaoAuthService implements AuthRemoteDataSource {
     }
   }
 
-  String _mapDioError(DioException e, String requestUrl) {
+  String _mapDioError(
+    DioException e,
+    String requestUrl, {
+    String actionLabel = '로그인',
+  }) {
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
@@ -86,11 +90,11 @@ class KakaoAuthService implements AuthRemoteDataSource {
       case DioExceptionType.badResponse:
         final data = e.response?.data;
         if (data is Map && data['message'] != null) {
-          return '서버 로그인 실패 (${e.response?.statusCode})\n${data['message']}';
+          return '서버 $actionLabel 실패 (${e.response?.statusCode})\n${data['message']}';
         }
-        return '서버 로그인 실패 (${e.response?.statusCode})\n$requestUrl';
+        return '서버 $actionLabel 실패 (${e.response?.statusCode})\n$requestUrl';
       default:
-        return '서버 로그인 실패\n$requestUrl\n${e.message ?? e.type}';
+        return '서버 $actionLabel 실패\n$requestUrl\n${e.message ?? e.type}';
     }
   }
 
@@ -107,24 +111,34 @@ class KakaoAuthService implements AuthRemoteDataSource {
     String? name,
   }) async {
     final requestUrl = '${AppConfig.apiBaseUrl}${ApiEndpoints.kakaoSignup}';
+    // 서버 매칭용: 숫자만 전송 (010 - 1234 - 5678 → 01012345678)
+    final normalizedPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    final normalizedBirth = birthDate.trim();
+    final normalizedName = name?.trim();
+
     debugPrint('Backend signup request: POST $requestUrl');
-  
+    debugPrint(
+      'signup payload: phone=$normalizedPhone, birthDate=$normalizedBirth, '
+      'name=$normalizedName',
+    );
+
     try {
       final response = await ApiClient.dio.post(
         ApiEndpoints.kakaoSignup,
         data: {
           'signupToken': signupToken,
-          'phone': phone,
-          'birthDate': birthDate,
-          if (name != null && name.isNotEmpty) 'name': name,
+          'phone': normalizedPhone,
+          'birthDate': normalizedBirth,
+          // 백엔드에서 name 필수로 받는 경우 대비해 항상 전달
+          'name': normalizedName ?? '',
         },
       );
-  
+
       final data = response.data;
       if (data is! Map) {
         throw Exception('서버 응답 형식이 올바르지 않습니다. (${data.runtimeType})');
       }
-  
+
       return LoginResponse.fromJson(Map<String, dynamic>.from(data));
     } on DioException catch (e) {
       debugPrint(
@@ -132,7 +146,9 @@ class KakaoAuthService implements AuthRemoteDataSource {
         'status=${e.response?.statusCode}, url=$requestUrl, '
         'data=${e.response?.data}',
       );
-      throw Exception(_mapDioError(e, requestUrl));
+      throw Exception(
+        _mapDioError(e, requestUrl, actionLabel: '회원가입'),
+      );
     }
   }
 
