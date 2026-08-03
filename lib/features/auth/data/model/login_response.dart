@@ -15,14 +15,51 @@ class LoginResponse {
     this.signupToken,
   });
 
+  bool get needsSignup =>
+      isNewUser || (signupToken != null && signupToken!.isNotEmpty);
+
   factory LoginResponse.fromJson(Map<String, dynamic> json) {
+    final signupToken = _readString(json, const [
+      'signup_token',
+      'signupToken',
+    ]);
+
+    final isNewUser = _readBool(json, const [
+          'is_new_user',
+          'isNewUser',
+        ]) ||
+        (signupToken != null && signupToken.isNotEmpty);
+
     return LoginResponse(
-      access: json['access']?.toString() ?? "",
-      refresh: json['refresh']?.toString() ?? "",
-      patientId: json["patient_id"]?.toString(),
-      patientName: json["patient_name"]?.toString(),
-      isNewUser: json['is_new_user'] == true,
-      signupToken: json['signup_token']?.toString(),
+      access: _readString(json, const ['access', 'access_token']) ?? '',
+      refresh: _readString(json, const ['refresh', 'refresh_token']) ?? '',
+      patientId: _readString(json, const ['patient_id', 'patientId']),
+      patientName: _readString(json, const ['patient_name', 'patientName']),
+      isNewUser: isNewUser,
+      signupToken: signupToken,
     );
+  }
+
+  static String? _readString(Map<String, dynamic> json, List<String> keys) {
+    for (final key in keys) {
+      final value = json[key];
+      if (value == null) continue;
+      final text = value.toString().trim();
+      if (text.isEmpty || text.toLowerCase() == 'null') continue;
+      return text;
+    }
+    return null;
+  }
+
+  static bool _readBool(Map<String, dynamic> json, List<String> keys) {
+    for (final key in keys) {
+      final value = json[key];
+      if (value == true || value == 1) return true;
+      if (value is String) {
+        final normalized = value.trim().toLowerCase();
+        if (normalized == 'true' || normalized == '1') return true;
+      }
+    }
+    return false;
   }
 }

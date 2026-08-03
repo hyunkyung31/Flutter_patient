@@ -33,11 +33,12 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
 
       // 신규 회원 → 회원가입
-      if (result.isNewUser) {
+      if (result.needsSignup) {
         final signupToken = result.signupToken;
         if (signupToken == null || signupToken.isEmpty) {
           setState(() {
-            _errorMessage = '회원가입 토큰이 없습니다. 서버 응답을 확인해주세요.';
+            _errorMessage =
+                '회원가입이 필요하지만 signup_token이 없습니다.\n서버 응답을 확인해주세요.';
           });
           return;
         }
@@ -47,6 +48,13 @@ class _LoginPageState extends State<LoginPage> {
             builder: (_) => SignupPage(signupToken: signupToken),
           ),
         );
+        return;
+      }
+
+      if (result.access.isEmpty || result.refresh.isEmpty) {
+        setState(() {
+          _errorMessage = '로그인 토큰이 없습니다. 서버 응답을 확인해주세요.';
+        });
         return;
       }
 
