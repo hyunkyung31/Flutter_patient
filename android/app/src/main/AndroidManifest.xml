@@ -4,6 +4,10 @@
     <!-- Android 10 이상에서 걸음 수 센서 접근에 필요한 런타임 권한 -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 
+    <!-- 생체인증 (지문/Face) -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    <uses-permission android:name="android.permission.USE_FINGERPRINT"/>
+
     <application
         android:label="patient_app"
         android:name="${applicationName}"

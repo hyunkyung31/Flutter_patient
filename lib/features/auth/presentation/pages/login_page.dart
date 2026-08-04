@@ -62,21 +62,28 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      // 기존 회원 → 토큰 저장 후 홈
-      await SecureStorageService.saveToken(
+      // 기존 회원 → 토큰/프로필 저장 후 홈 (자동로그인 기본 ON)
+      await SecureStorageService.saveSession(
         access: result.access,
         refresh: result.refresh,
+        patientId: result.patientId,
+        patientName: result.patientName,
+        enableAutoLogin: true,
       );
       if (!mounted) return;
 
       debugPrint(
         'Login OK → MainShell '
-        'patient=${result.patientName}, accessLen=${result.access.length}',
+        'patient=${result.patientName}, id=${result.patientId}, '
+        'accessLen=${result.access.length}',
       );
 
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
-          builder: (_) => MainShellPage(patientName: result.patientName),
+          builder: (_) => MainShellPage(
+            patientName: result.patientName,
+            patientId: result.patientId,
+          ),
         ),
         (_) => false,
       );

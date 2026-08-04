@@ -113,9 +113,12 @@ class _SignupPageState extends State<SignupPage> {
         throw Exception('회원가입 응답에 토큰이 없습니다.');
       }
 
-      await SecureStorageService.saveToken(
+      await SecureStorageService.saveSession(
         access: result.access,
         refresh: result.refresh,
+        patientId: result.patientId,
+        patientName: result.patientName ?? name,
+        enableAutoLogin: true,
       );
 
       if (!mounted) return;
@@ -124,10 +127,12 @@ class _SignupPageState extends State<SignupPage> {
         const SnackBar(content: Text('회원가입 및 로그인 성공')),
       );
 
-      // TODO: 홈으로 이동
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
-          builder: (_) => MainShellPage(patientName: result.patientName ?? name),
+          builder: (_) => MainShellPage(
+            patientName: result.patientName ?? name,
+            patientId: result.patientId,
+          ),
         ),
         (_) => false,
       );
