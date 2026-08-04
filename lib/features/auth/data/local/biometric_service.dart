@@ -39,7 +39,10 @@ class BiometricService {
 
       return await _auth.authenticate(
         localizedReason: reason,
-        biometricOnly: false, // PIN/패턴 폴백 허용
+        options: const AuthenticationOptions(
+          biometricOnly: false, // PIN/패턴 폴백 허용
+          stickyAuth: true,
+        ),
       );
     } catch (e) {
       debugPrint('Biometric authenticate failed: $e');
