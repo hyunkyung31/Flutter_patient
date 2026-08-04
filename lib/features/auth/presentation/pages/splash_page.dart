@@ -1,13 +1,17 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:patient_app/core/storage/secure_storage.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
+import 'package:patient_app/features/auth/data/local/biometric_service.dart';
 
+import '../../../home/view/main_shell_page.dart';
 import 'login_page.dart';
 
 /// Intro splash
 /// - vena / heart: 고정
 /// - ECG: 왼쪽 → 오른쪽으로 그려지며 반복
+/// - 토큰 + 자동로그인(+생체) 있으면 홈으로, 아니면 로그인
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
 
@@ -21,6 +25,9 @@ class _SplashPageState extends State<SplashPage>
   late final AnimationController _progressController;
   late final AnimationController _fadeController;
   Timer? _navTimer;
+  bool _navigated = false;
+
+  final _biometric = BiometricService();
 
   @override
   void initState() {
@@ -38,16 +45,68 @@ class _SplashPageState extends State<SplashPage>
 
     _progressController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 3000),
+      duration: const Duration(milliseconds: 2400),
     )..forward();
 
-    _navTimer = Timer(const Duration(milliseconds: 3200), () {
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginPage()),
-      );
-    });
+    _navTimer = Timer(const Duration(milliseconds: 2500), _bootstrap);
+  }
+
+  Future<void> _bootstrap() async {
+    if (!mounted || _navigated) return;
+
+    try {
+      final hasTokens = await SecureStorageService.hasTokens();
+      final autoLogin = await SecureStorageService.isAutoLoginEnabled();
+
+      if (!hasTokens || !autoLogin) {
+        _goLogin();
+        return;
+      }
+
+      final biometricOn = await SecureStorageService.isBiometricEnabled();
+      if (biometricOn) {
+        final canBio = await _biometric.canCheckBiometrics();
+        if (canBio) {
+          final ok = await _biometric.authenticate(
+            reason: '자동로그인을 위해 생체인증을 진행합니다.',
+          );
+          if (!ok) {
+            // 실패 시 로그인 화면으로 (토큰은 유지 → 설정에서 다시 시도 가능)
+            _goLogin();
+            return;
+          }
+        }
+      }
+
+      final name = await SecureStorageService.getPatientName();
+      final patientId = await SecureStorageService.getPatientId();
+      _goHome(patientName: name, patientId: patientId);
+    } catch (_) {
+      _goLogin();
+    }
+  }
+
+  void _goLogin() {
+    if (!mounted || _navigated) return;
+    _navigated = true;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+    );
+  }
+
+  void _goHome({String? patientName, String? patientId}) {
+    if (!mounted || _navigated) return;
+    _navigated = true;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MainShellPage(
+          patientName: patientName,
+          patientId: patientId,
+        ),
+      ),
+    );
   }
 
   @override
@@ -85,7 +144,6 @@ class _SplashPageState extends State<SplashPage>
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // vena 글자 고정
                         Image.asset(
                           'assets/images/vena_text.png',
                           height: 56,
@@ -101,13 +159,10 @@ class _SplashPageState extends State<SplashPage>
                           ),
                         ),
                         const SizedBox(height: 16),
-
-                        // ECG(왼→오) + heart
                         AnimatedBuilder(
                           animation: _ecgController,
                           builder: (context, _) {
-                            final draw =
-                                _drawProgress(_ecgController.value);
+                            final draw = _drawProgress(_ecgController.value);
                             final heartOpacity = Curves.easeOut.transform(
                               ((draw - 0.85) / 0.15).clamp(0.0, 1.0),
                             );
