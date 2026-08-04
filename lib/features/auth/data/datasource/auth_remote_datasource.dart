@@ -7,7 +7,7 @@ abstract class AuthRemoteDataSource {
     required String signupToken,
     required String phone,
     required String birthDate,
-    String? name,
+    required String name,
   });
 
   Future<LoginResponse> refreshToken();
