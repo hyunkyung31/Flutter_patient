@@ -21,16 +21,12 @@ class KakaoAuthService implements AuthRemoteDataSource {
     try {
       final response = await ApiClient.dio.post(
         ApiEndpoints.kakaoLogin,
-        data: {
-          'accessToken': token.accessToken,
-        },
+        data: {'accessToken': token.accessToken},
       );
 
       final data = response.data;
       if (data is! Map) {
-        throw Exception(
-          '서버 응답 형식이 올바르지 않습니다. (${data.runtimeType})',
-        );
+        throw Exception('서버 응답 형식이 올바르지 않습니다. (${data.runtimeType})');
       }
 
       return LoginResponse.fromJson(Map<String, dynamic>.from(data));
@@ -104,11 +100,11 @@ class KakaoAuthService implements AuthRemoteDataSource {
     required String signupToken,
     required String phone,
     required String birthDate,
-    String? name,
+    required String name,
   }) async {
     final requestUrl = '${AppConfig.apiBaseUrl}${ApiEndpoints.kakaoSignup}';
     debugPrint('Backend signup request: POST $requestUrl');
-  
+
     try {
       final response = await ApiClient.dio.post(
         ApiEndpoints.kakaoSignup,
@@ -116,15 +112,15 @@ class KakaoAuthService implements AuthRemoteDataSource {
           'signupToken': signupToken,
           'phone': phone,
           'birthDate': birthDate,
-          if (name != null && name.isNotEmpty) 'name': name,
+          'name': name,
         },
       );
-  
+
       final data = response.data;
       if (data is! Map) {
         throw Exception('서버 응답 형식이 올바르지 않습니다. (${data.runtimeType})');
       }
-  
+
       return LoginResponse.fromJson(Map<String, dynamic>.from(data));
     } on DioException catch (e) {
       debugPrint(
