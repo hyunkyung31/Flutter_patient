@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
 
+import '../../health_rewards/view/health_mission_view.dart';
 import '../../mypage/view/my_page.dart';
 import '../../reservation/view/reservation_page.dart';
 import '../../result/view/exam_history_page.dart';
-import '../../wayfinding/view/wayfinding_page.dart';
 import 'home_page.dart';
 
-/// 환자앱 메인 뼈대 (하단 탭 5개 + 챗봇 FAB)
+/// 환자앱 메인 뼈대
+/// 탭: 홈 / 예약 / 검사 / 건강정원 / 마이 + 챗봇 FAB
 class MainShellPage extends StatefulWidget {
   const MainShellPage({
     super.key,
@@ -50,7 +51,7 @@ class _MainShellPageState extends State<MainShellPage> {
       ),
       const ReservationPage(),
       const ExamHistoryPage(),
-      const WayfindingPage(),
+      const HealthMissionView(),
       MyPage(patientName: widget.patientName),
     ];
 
@@ -100,9 +101,10 @@ class _MainShellPageState extends State<MainShellPage> {
             label: '검사',
           ),
           NavigationDestination(
-            icon: Icon(Icons.map_outlined),
-            selectedIcon: Icon(Icons.map_rounded, color: AppColors.primary),
-            label: '길찾기',
+            icon: Icon(Icons.local_florist_outlined),
+            selectedIcon:
+                Icon(Icons.local_florist_rounded, color: AppColors.primary),
+            label: '건강정원',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline_rounded),

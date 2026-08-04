@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
+
+import '../../health_rewards/services/step_counter_service.dart';
+import '../../wayfinding/view/wayfinding_page.dart';
 
 /// 홈 탭 화면 (와이어프레임 맞춤)
 class HomePage extends StatelessWidget {
@@ -12,7 +16,7 @@ class HomePage extends StatelessWidget {
   final String? patientName;
 
   /// 하단탭 이동 콜백
-  /// 0홈 1예약 2검사 3길찾기 4마이
+  /// 0홈 1예약 2검사 3건강정원 4마이
   final ValueChanged<int>? onOpenTab;
 
   @override
@@ -134,7 +138,13 @@ class HomePage extends StatelessWidget {
                   child: _QuickAction(
                     icon: Icons.map_rounded,
                     label: '길찾기',
-                    onTap: () => onOpenTab?.call(3),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const WayfindingPage(),
+                        ),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -149,8 +159,10 @@ class HomePage extends StatelessWidget {
             ),
             const SizedBox(height: 18),
 
-            // 히어로/배너 (이미지 없으면 그라데이션으로 대체 → 검은 박스 방지)
-            const _HeroBanner(),
+            // 걸음수 카드 → 건강정원(health_rewards)
+            _StepsCard(
+              onTap: () => onOpenTab?.call(3),
+            ),
             const SizedBox(height: 12),
 
             // AI 안내 바
@@ -368,68 +380,127 @@ class _QuickAction extends StatelessWidget {
   }
 }
 
-class _HeroBanner extends StatelessWidget {
-  const _HeroBanner();
+class _StepsCard extends StatefulWidget {
+  const _StepsCard({this.onTap});
+
+  final VoidCallback? onTap;
+
+  @override
+  State<_StepsCard> createState() => _StepsCardState();
+}
+
+class _StepsCardState extends State<_StepsCard> {
+  static const int _targetSteps = 10000;
+
+  late final StepCounterService _stepService;
+
+  @override
+  void initState() {
+    super.initState();
+    _stepService = StepCounterService();
+    _stepService.addListener(_onStepsChanged);
+    _stepService.initialize();
+  }
+
+  void _onStepsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _stepService.removeListener(_onStepsChanged);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: AspectRatio(
-        aspectRatio: 16 / 7,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // 이미지 실패해도 검정 박스 안 나오게 그라데이션 기본
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFFE0F2FE),
-                    Color(0xFFFFE6EA),
-                    Color(0xFFDBEAFE),
+    final steps = _stepService.currentSteps;
+    final progress = (steps / _targetSteps).clamp(0.0, 1.0);
+    final formatter = NumberFormat('#,###');
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Ink(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(18, 16, 14, 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [
+                Color(0xFFDCEBFF),
+                Color(0xFFFFE4EC),
+              ],
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x141E3A8A),
+                blurRadius: 14,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${formatter.format(steps)} / ${formatter.format(_targetSteps)} 걸음',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      '오늘도 열심히 걸어봐요!',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 8,
+                        backgroundColor: Colors.white.withValues(alpha: 0.7),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          AppColors.secondary,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
-            ),
-            Image.asset(
-              'assets/images/ui/home_banner.png',
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: Image.asset(
+              const SizedBox(width: 10),
+              Image.asset(
+                'assets/images/bomi_cheer.png',
+                width: 78,
+                height: 78,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => Image.asset(
                   'assets/images/mascot/bomi_cheer.png',
-                  height: 110,
+                  width: 78,
+                  height: 78,
                   errorBuilder: (_, __, ___) => const Icon(
-                    Icons.favorite_rounded,
-                    size: 72,
-                    color: AppColors.accent,
-                  ),
-                ),
-              ),
-            ),
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: EdgeInsets.only(left: 18),
-                child: Text(
-                  'VENA와 함께\n건강한 하루를!',
-                  style: TextStyle(
-                    fontSize: 18,
-                    height: 1.35,
-                    fontWeight: FontWeight.w800,
+                    Icons.directions_walk_rounded,
+                    size: 56,
                     color: AppColors.primary,
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
