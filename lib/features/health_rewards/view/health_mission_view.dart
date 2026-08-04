@@ -655,151 +655,40 @@ class _HealthMissionViewState extends State<HealthMissionView> {
   Future<void> _confirmWaterMission() async {
     final bool? isConfirmed = await showDialog<bool>(
       context: context,
-      barrierDismissible: false,
       builder: (dialogContext) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 34),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(22, 24, 22, 20),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFFCFF),
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(color: const Color(0xFFE4D7F0)),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x24000000),
-                  blurRadius: 22,
-                  offset: Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFF2EAFE),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.local_cafe_rounded,
-                    size: 36,
-                    color: Color(0xFF8057B5),
-                  ),
-                ),
-
-                const SizedBox(height: 18),
-
-                const Text(
-                  '아메리카노로 교환할까요?',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF344054),
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                const Text(
-                  '꽃 스탬프 10개를 사용해\n'
-                  '아메리카노 기프티콘으로 교환해요.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 1.55,
-                    color: Color(0xFF667085),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 13,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF5F9),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.local_florist_rounded,
-                        size: 20,
-                        color: Color(0xFFE96F9B),
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        '꽃 스탬프 10개 사용',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFFE96F9B),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 22),
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {
-                          Navigator.of(dialogContext).pop(false);
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF8057B5),
-                          side: const BorderSide(color: Color(0xFFD8C8E8)),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: const Text(
-                          '취소',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(width: 10),
-
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: () {
-                          Navigator.of(dialogContext).pop(true);
-                        },
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF8057B5),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: const Text(
-                          '교환하기',
-                          style: TextStyle(fontWeight: FontWeight.w900),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
           ),
+          title: const Row(
+            children: [
+              Icon(Icons.water_drop_rounded, color: Color(0xFF59A7E8)),
+              SizedBox(width: 8),
+              Text('물 마시기 확인'),
+            ],
+          ),
+          content: const Text(
+            '오늘 필요한 물을 충분히 마셨나요?\n'
+            '완료하면 보미가 정원의 식물에 물을 줘요.',
+            style: TextStyle(height: 1.5, color: Color(0xFF667085)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('아직이에요'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF59A7E8),
+              ),
+              child: const Text('마셨어요'),
+            ),
+          ],
         );
       },
     );
@@ -817,13 +706,14 @@ class _HealthMissionViewState extends State<HealthMissionView> {
     _showBomiActionPopup(
       imagePath: 'assets/images/bomi_smile.png',
       title: '보미가 꽃에 물을 주었어요!',
-      message: '물을 잘 챙겨 마신 덕분에\n정원의 식물도 한 단계 성장했어요.',
+      message:
+          '물을 잘 챙겨 마신 덕분에\n'
+          '정원의 식물도 한층 더 건강해졌어요.',
       themeColor: const Color(0xFF59A7E8),
       backgroundColor: const Color(0xFFF4FBFF),
       circleColor: const Color(0xFFE3F5FD),
       borderColor: const Color(0xFFCDE8F7),
       actionIcon: Icons.water_drop_rounded,
-
       showGardenButton: true,
     );
   }
