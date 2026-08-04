@@ -74,7 +74,7 @@ class RewardShopView extends StatelessWidget {
                       }
 
                       ScaffoldMessenger.of(context)
-                        ..hideCurrentSnackBar()
+                        ..clearSnackBars()
                         ..showSnackBar(
                           SnackBar(
                             content: Row(
@@ -101,15 +101,6 @@ class RewardShopView extends StatelessWidget {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
                             ),
-                            action: willEnable
-                                ? SnackBarAction(
-                                    label: '정원 보기',
-                                    textColor: const Color(0xFFFFD7E4),
-                                    onPressed: () {
-                                      Navigator.of(context).pop();
-                                    },
-                                  )
-                                : null,
                           ),
                         );
                     },
@@ -127,7 +118,7 @@ class RewardShopView extends StatelessWidget {
                       }
 
                       ScaffoldMessenger.of(context)
-                        ..hideCurrentSnackBar()
+                        ..clearSnackBars()
                         ..showSnackBar(
                           SnackBar(
                             content: const Row(
@@ -142,18 +133,11 @@ class RewardShopView extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            duration: const Duration(seconds: 3),
+                            duration: const Duration(seconds: 2),
                             behavior: SnackBarBehavior.floating,
                             margin: const EdgeInsets.all(16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
-                            ),
-                            action: SnackBarAction(
-                              label: '정원 보기',
-                              textColor: const Color(0xFFFFD7E4),
-                              onPressed: () {
-                                Navigator.of(context).pop();
-                              },
                             ),
                           ),
                         );
@@ -170,7 +154,7 @@ class RewardShopView extends StatelessWidget {
                       }
 
                       ScaffoldMessenger.of(context)
-                        ..hideCurrentSnackBar()
+                        ..clearSnackBars()
                         ..showSnackBar(
                           SnackBar(
                             content: Row(
@@ -196,13 +180,6 @@ class RewardShopView extends StatelessWidget {
                             margin: const EdgeInsets.all(16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
-                            ),
-                            action: SnackBarAction(
-                              label: '정원 보기',
-                              textColor: const Color(0xFFFFD7E4),
-                              onPressed: () {
-                                Navigator.of(context).pop();
-                              },
                             ),
                           ),
                         );
