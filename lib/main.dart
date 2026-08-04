@@ -4,6 +4,7 @@ import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 
 import 'core/config/app_config.dart';
 import 'features/auth/presentation/pages/splash_page.dart';
+import 'features/health_rewards/view/health_mission_view.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,6 +25,7 @@ class MyApp extends StatelessWidget {
       title: 'Vena',
       debugShowCheckedModeBanner: false,
       home: const SplashPage(),
+      routes: {'/health-rewards': (context) => const HealthMissionView()},
     );
   }
 }
