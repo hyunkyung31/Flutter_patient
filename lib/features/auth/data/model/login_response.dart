@@ -15,6 +15,7 @@ class LoginResponse {
     this.signupToken,
   });
 
+  /// 신규 가입이 필요한지
   bool get needsSignup =>
       isNewUser || (signupToken != null && signupToken!.isNotEmpty);
 
