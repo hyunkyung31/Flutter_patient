@@ -26,6 +26,9 @@ class KakaoAuthService implements AuthRemoteDataSource {
         },
       );
 
+      debugPrint(
+        'Backend login response: ${response.statusCode} ${response.data}',
+      );
       return _parseLoginResponse(response.data);
     } on DioException catch (e) {
       debugPrint(
@@ -146,7 +149,7 @@ class KakaoAuthService implements AuthRemoteDataSource {
     return phone.replaceAll(RegExp(r'[^0-9]'), '');
   }
 
-  /// 1992-10-31 / 1992.10.31 / 921031 / 19921031 → YYYY-MM-DD 우선
+  /// 1992-10-31 / 1992.10.31 / 921031 / 19921031 → YYYY-MM-DD
   String _normalizeBirthDate(String birthDate) {
     final raw = birthDate.trim();
     final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
@@ -156,12 +159,10 @@ class KakaoAuthService implements AuthRemoteDataSource {
     }
 
     if (digits.length == 8) {
-      // YYYYMMDD → YYYY-MM-DD
       return '${digits.substring(0, 4)}-${digits.substring(4, 6)}-${digits.substring(6, 8)}';
     }
 
     if (digits.length == 6) {
-      // YYMMDD → 19xx/20xx 추정
       final yy = int.parse(digits.substring(0, 2));
       final year = yy >= 50 ? 1900 + yy : 2000 + yy;
       return '$year-${digits.substring(2, 4)}-${digits.substring(4, 6)}';
@@ -180,12 +181,12 @@ class KakaoAuthService implements AuthRemoteDataSource {
     required String signupToken,
     required String phone,
     required String birthDate,
-    String? name,
+    required String name,
   }) async {
     final requestUrl = '${AppConfig.apiBaseUrl}${ApiEndpoints.kakaoSignup}';
     final normalizedPhone = _normalizePhone(phone);
     final normalizedBirth = _normalizeBirthDate(birthDate);
-    final normalizedName = name?.trim() ?? '';
+    final normalizedName = name.trim();
 
     if (normalizedName.isEmpty) {
       throw Exception('이름을 입력해주세요.');
@@ -211,6 +212,9 @@ class KakaoAuthService implements AuthRemoteDataSource {
         },
       );
 
+      debugPrint(
+        'Backend signup response: ${response.statusCode} ${response.data}',
+      );
       return _parseLoginResponse(response.data);
     } on DioException catch (e) {
       debugPrint(

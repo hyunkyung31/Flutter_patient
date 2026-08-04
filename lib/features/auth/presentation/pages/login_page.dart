@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:patient_app/core/storage/secure_storage.dart';
@@ -33,7 +34,7 @@ class _LoginPageState extends State<LoginPage> {
       final result = await _authService.loginWithKakao();
       if (!mounted) return;
 
-      // 신규 회원 → 회원가입
+      // 신규 회원 → 회원가입 화면
       if (result.needsSignup) {
         final signupToken = result.signupToken;
         if (signupToken == null || signupToken.isEmpty) {
@@ -43,6 +44,8 @@ class _LoginPageState extends State<LoginPage> {
           });
           return;
         }
+
+        debugPrint('Login → SignupPage (signupToken exists)');
         await Navigator.push(
           context,
           MaterialPageRoute(
@@ -59,18 +62,23 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      // 기존 회원
+      // 기존 회원 → 토큰 저장 후 홈
       await SecureStorageService.saveToken(
         access: result.access,
         refresh: result.refresh,
       );
       if (!mounted) return;
 
-      Navigator.pushReplacement(
-        context,
+      debugPrint(
+        'Login OK → MainShell '
+        'patient=${result.patientName}, accessLen=${result.access.length}',
+      );
+
+      Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
           builder: (_) => MainShellPage(patientName: result.patientName),
         ),
+        (_) => false,
       );
     } on PlatformException catch (e) {
       // 카카오 창 닫기/취소는 에러로 보여주지 않음
@@ -80,7 +88,6 @@ class _LoginPageState extends State<LoginPage> {
       });
     } catch (e) {
       if (!mounted) return;
-      // Exception으로 감싸진 CANCELED도 무시
       final msg = e.toString();
       if (msg.contains('CANCELED') || msg.contains('User canceled login')) {
         return;
@@ -179,7 +186,6 @@ class _LoginHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // 합쳐진 로고가 있으면 우선 사용, 없으면 vena_text
         Image.asset(
           'assets/images/vena_login_logo.png',
           height: 88,
