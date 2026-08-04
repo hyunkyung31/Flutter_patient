@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:patient_app/core/storage/secure_storage.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
 
-import '../../../home/view/home_page.dart';
+import '../../../home/view/main_shell_page.dart';
 import '../../data/datasource/kakao_auth_service.dart';
 import '../widgets/kakao_login_button.dart';
 import 'signup_page.dart';
@@ -69,7 +69,7 @@ class _LoginPageState extends State<LoginPage> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => HomePage(patientName: result.patientName),
+          builder: (_) => MainShellPage(patientName: result.patientName),
         ),
       );
     } on PlatformException catch (e) {
