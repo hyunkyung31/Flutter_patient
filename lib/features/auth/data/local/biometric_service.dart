@@ -37,12 +37,11 @@ class BiometricService {
       final ok = await canCheckBiometrics();
       if (!ok) return false;
 
+      // local_auth 버전에 따라 options / biometricOnly 시그니처가 다름.
+      // 현재 프로젝트에서 resolve된 API는 top-level biometricOnly 사용.
       return await _auth.authenticate(
         localizedReason: reason,
-        options: const AuthenticationOptions(
-          biometricOnly: false, // PIN/패턴 폴백 허용
-          stickyAuth: true,
-        ),
+        biometricOnly: false, // PIN/패턴 폴백 허용
       );
     } catch (e) {
       debugPrint('Biometric authenticate failed: $e');
