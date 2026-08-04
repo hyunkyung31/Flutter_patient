@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:patient_app/core/storage/secure_storage.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
 
+import '../../../home/view/home_page.dart';
 import '../../data/datasource/kakao_auth_service.dart';
 import '../widgets/kakao_login_button.dart';
 import 'signup_page.dart';
@@ -33,11 +34,12 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
 
       // 신규 회원 → 회원가입
-      if (result.isNewUser) {
+      if (result.needsSignup) {
         final signupToken = result.signupToken;
         if (signupToken == null || signupToken.isEmpty) {
           setState(() {
-            _errorMessage = '회원가입 토큰이 없습니다. 서버 응답을 확인해주세요.';
+            _errorMessage =
+                '회원가입이 필요하지만 signup_token이 없습니다.\n서버 응답을 확인해주세요.';
           });
           return;
         }
@@ -50,6 +52,13 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
+      if (result.access.isEmpty || result.refresh.isEmpty) {
+        setState(() {
+          _errorMessage = '로그인 토큰이 없습니다. 서버 응답을 확인해주세요.';
+        });
+        return;
+      }
+
       // 기존 회원
       await SecureStorageService.saveToken(
         access: result.access,
@@ -57,19 +66,25 @@ class _LoginPageState extends State<LoginPage> {
       );
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('로그인 성공')),
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => HomePage(patientName: result.patientName),
+        ),
       );
-
-      // TODO: 홈으로 이동
-      // Navigator.pushReplacement(... HomePage ...);
     } on PlatformException catch (e) {
+      // 카카오 창 닫기/취소는 에러로 보여주지 않음
       if (!mounted || e.code == 'CANCELED') return;
       setState(() {
         _errorMessage = '카카오 로그인 실패\ncode=${e.code}\n${e.message}';
       });
     } catch (e) {
       if (!mounted) return;
+      // Exception으로 감싸진 CANCELED도 무시
+      final msg = e.toString();
+      if (msg.contains('CANCELED') || msg.contains('User canceled login')) {
+        return;
+      }
       setState(() {
         _errorMessage = _userFacingMessage(e);
       });
