@@ -200,16 +200,21 @@ class _LoginHeader extends StatelessWidget {
           semanticLabel: 'VENA',
           errorBuilder: (_, __, ___) {
             return Image.asset(
-              'assets/images/vena_text.png',
-              height: 56,
+              'assets/images/brand/vena_logo.png',
+              height: 88,
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const Text(
-                'vena',
-                style: TextStyle(
-                  fontSize: 48,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.accent,
-                  letterSpacing: 1.4,
+              errorBuilder: (_, __, ___) => Image.asset(
+                'assets/images/brand/vena_text.png',
+                height: 56,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Text(
+                  'vena',
+                  style: TextStyle(
+                    fontSize: 48,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.accent,
+                    letterSpacing: 1.4,
+                  ),
                 ),
               ),
             );

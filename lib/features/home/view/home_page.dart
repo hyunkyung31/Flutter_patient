@@ -5,7 +5,7 @@ import 'package:patient_app/core/theme/app_colors.dart';
 import '../../health_rewards/services/step_counter_service.dart';
 import '../../wayfinding/view/wayfinding_page.dart';
 
-/// 홈 탭 화면 (와이어프레임 맞춤)
+/// 홈 탭 (시안 피드백 반영)
 class HomePage extends StatelessWidget {
   const HomePage({
     super.key,
@@ -15,7 +15,6 @@ class HomePage extends StatelessWidget {
 
   final String? patientName;
 
-  /// 하단탭 이동 콜백
   /// 0홈 1예약 2검사 3건강정원 4마이
   final ValueChanged<int>? onOpenTab;
 
@@ -25,208 +24,218 @@ class HomePage extends StatelessWidget {
         ? '환자'
         : patientName!;
 
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 상단 로고 + 알림
-            Row(
+    return Column(
+      children: [
+        const _HomeHeader(),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+            child: Column(
               children: [
-                Image.asset(
-                  'assets/images/brand/vena_text.png',
-                  height: 28,
-                  errorBuilder: (_, __, ___) => Image.asset(
-                    'assets/images/vena_text.png',
-                    height: 28,
-                    errorBuilder: (_, __, ___) => const Text(
-                      'vena',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.accent,
-                      ),
-                    ),
+                _WelcomeCard(name: name),
+                const SizedBox(height: 12),
+                // 두 카드 높이 동일
+                IntrinsicHeight(
+                  child: _SummaryCards(
+                    onReservation: () => onOpenTab?.call(1),
+                    onExamHistory: () => onOpenTab?.call(2),
                   ),
                 ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('알림 센터는 다음 단계에서 연결합니다.')),
+                const SizedBox(height: 12),
+                _ShortcutsSection(
+                  onReservation: () => onOpenTab?.call(1),
+                  onExam: () => onOpenTab?.call(2),
+                  onWayfinding: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const WayfindingPage(),
+                      ),
                     );
                   },
-                  icon: const Icon(
-                    Icons.notifications_none_rounded,
-                    color: AppColors.primary,
-                  ),
+                  onMyInfo: () => onOpenTab?.call(4),
                 ),
+                const SizedBox(height: 12),
+                // 걸음수 카드 (보미 크게 오버랩) → 건강정원
+                _StepsCard(onTap: () => onOpenTab?.call(3)),
+                const SizedBox(height: 12),
+                const _AiNoticeBanner(),
               ],
             ),
-            const SizedBox(height: 4),
-
-            // 인사 + 보미
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '안녕하세요, $name님',
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.text,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        '오늘도 심혈관 건강을\n함께 챙겨볼게요.',
-                        style: TextStyle(
-                          fontSize: 14,
-                          height: 1.45,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const _MascotCluster(),
-              ],
-            ),
-            const SizedBox(height: 18),
-
-            // 다음 예약 | 최근 검사 (한 카드 좌우 분할)
-            _SplitStatusCard(
-              onReservation: () => onOpenTab?.call(1),
-              onExamHistory: () => onOpenTab?.call(2),
-            ),
-            const SizedBox(height: 20),
-
-            const Text(
-              '바로가기',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: AppColors.text,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _QuickAction(
-                    icon: Icons.calendar_month_rounded,
-                    label: '예약',
-                    onTap: () => onOpenTab?.call(1),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _QuickAction(
-                    icon: Icons.assignment_rounded,
-                    label: '검사',
-                    onTap: () => onOpenTab?.call(2),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _QuickAction(
-                    icon: Icons.map_rounded,
-                    label: '길찾기',
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const WayfindingPage(),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _QuickAction(
-                    icon: Icons.person_rounded,
-                    label: '내정보',
-                    onTap: () => onOpenTab?.call(4),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-
-            // 걸음수 카드 → 건강정원(health_rewards)
-            _StepsCard(
-              onTap: () => onOpenTab?.call(3),
-            ),
-            const SizedBox(height: 12),
-
-            // AI 안내 바
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFE6EA),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Text(
-                'AI 상담·진단 결과는 곧 연결될 예정이에요. (수빈 담당 기능)',
-                style: TextStyle(
-                  fontSize: 13,
-                  height: 1.4,
-                  color: AppColors.text,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }
 
-class _MascotCluster extends StatelessWidget {
-  const _MascotCluster();
+class _HomeHeader extends StatelessWidget {
+  const _HomeHeader();
 
   @override
   Widget build(BuildContext context) {
-    Widget one(String path) {
-      return Image.asset(
-        path,
-        width: 44,
-        height: 44,
-        fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => const Icon(
-          Icons.favorite_rounded,
-          color: AppColors.accent,
-          size: 28,
-        ),
-      );
-    }
-
-    return SizedBox(
-      width: 100,
-      height: 92,
-      child: Stack(
-        clipBehavior: Clip.none,
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.only(
+        top: MediaQuery.paddingOf(context).top + 10,
+        left: 20,
+        right: 8,
+        bottom: 12,
+      ),
+      color: AppColors.background,
+      child: Row(
         children: [
-          Positioned(left: 0, top: 8, child: one('assets/images/mascot/bomi_default.png')),
-          Positioned(left: 28, top: 0, child: one('assets/images/mascot/bomi_cheer.png')),
-          Positioned(left: 52, top: 18, child: one('assets/images/mascot/bomi_point.png')),
-          Positioned(left: 20, top: 46, child: one('assets/images/mascot/bomi_think.png')),
+          Image.asset(
+            'assets/images/brand/vena_text.png',
+            height: 28,
+            errorBuilder: (_, __, ___) => Image.asset(
+              'assets/images/vena_text.png',
+              height: 28,
+              errorBuilder: (_, __, ___) => const Text(
+                'vena',
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.secondary,
+                ),
+              ),
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('새로운 건강 알림이 있습니다.')),
+              );
+            },
+            icon: const Badge(
+              smallSize: 8,
+              backgroundColor: Color(0xFFEF4444),
+              child: Icon(
+                Icons.notifications_none_rounded,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: () {},
+            icon: const Icon(Icons.menu_rounded, color: AppColors.primary),
+          ),
         ],
       ),
     );
   }
 }
 
-class _SplitStatusCard extends StatelessWidget {
-  const _SplitStatusCard({
+class _WelcomeCard extends StatelessWidget {
+  const _WelcomeCard({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 16, 10, 16),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFF1F5F9)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0F1E3A8A),
+            blurRadius: 18,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.lightBlue,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.health_and_safety_outlined,
+                        size: 14,
+                        color: AppColors.secondary,
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        '혈관 건강 케어중',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text.rich(
+                  TextSpan(
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.text,
+                      height: 1.3,
+                    ),
+                    children: [
+                      const TextSpan(text: '안녕하세요, '),
+                      TextSpan(
+                        text: '$name님',
+                        style: const TextStyle(color: AppColors.primary),
+                      ),
+                      const TextSpan(text: ' 👋'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  '오늘도 심혈관 건강을\n함께 꼼꼼하게 챙겨볼게요.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.45,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Image.asset(
+            'assets/images/bomi_wink.png',
+            width: 96,
+            height: 96,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => Image.asset(
+              'assets/images/bomi_cheer.png',
+              width: 96,
+              height: 96,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.favorite_rounded,
+                size: 64,
+                color: AppColors.accent,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryCards extends StatelessWidget {
+  const _SummaryCards({
     this.onReservation,
     this.onExamHistory,
   });
@@ -236,97 +245,117 @@ class _SplitStatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.lightBlue),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x141E3A8A),
-            blurRadius: 16,
-            offset: Offset(0, 8),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: _SummaryCard(
+            title: '다음 예약',
+            icon: Icons.event_available_outlined,
+            subtitle: '아직 예정된 예약이 없어요.',
+            actionLabel: '예약하기',
+            actionColor: AppColors.lightBlue,
+            actionTextColor: AppColors.primary,
+            onTap: onReservation,
           ),
-        ],
-      ),
-      child: IntrinsicHeight(
-        child: Row(
-          children: [
-            Expanded(
-              child: _SplitPane(
-                title: '다음 예약',
-                subtitle: '아직 예정된 예약이 없어요.\n예약을 신청해 보세요.',
-                actionLabel: '예약하기',
-                onTap: onReservation,
-              ),
-            ),
-            Container(width: 1, color: AppColors.lightBlue),
-            Expanded(
-              child: _SplitPane(
-                title: '최근 검사',
-                subtitle: '검사 이력을\n확인해 보세요.',
-                actionLabel: '검사이력',
-                onTap: onExamHistory,
-              ),
-            ),
-          ],
         ),
-      ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _SummaryCard(
+            title: '최근 검사',
+            icon: Icons.medical_information_outlined,
+            subtitle: '최근 검사 이력을 바로 확인해보세요.',
+            actionLabel: '검사이력',
+            actionColor: const Color(0xFFF1F5F9),
+            actionTextColor: AppColors.text,
+            onTap: onExamHistory,
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _SplitPane extends StatelessWidget {
-  const _SplitPane({
+class _SummaryCard extends StatelessWidget {
+  const _SummaryCard({
     required this.title,
+    required this.icon,
     required this.subtitle,
     required this.actionLabel,
+    required this.actionColor,
+    required this.actionTextColor,
     this.onTap,
   });
 
   final String title;
+  final IconData icon;
   final String subtitle;
   final String actionLabel;
+  final Color actionColor;
+  final Color actionTextColor;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 16, 14, 10),
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFF1F5F9)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0F1E3A8A),
+            blurRadius: 14,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: AppColors.primary,
+          Row(
+            children: [
+              Icon(icon, size: 16, color: AppColors.secondary),
+              const SizedBox(width: 6),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: Text(
+              subtitle,
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.4,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            subtitle,
-            style: const TextStyle(
-              fontSize: 12.5,
-              height: 1.4,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          const Spacer(),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
               onPressed: onTap,
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.secondary,
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              style: FilledButton.styleFrom(
+                backgroundColor: actionColor,
+                foregroundColor: actionTextColor,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 textStyle: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
               child: Text(actionLabel),
@@ -338,15 +367,111 @@ class _SplitPane extends StatelessWidget {
   }
 }
 
-class _QuickAction extends StatelessWidget {
-  const _QuickAction({
-    required this.icon,
+class _ShortcutsSection extends StatelessWidget {
+  const _ShortcutsSection({
+    this.onReservation,
+    this.onExam,
+    this.onWayfinding,
+    this.onMyInfo,
+  });
+
+  final VoidCallback? onReservation;
+  final VoidCallback? onExam;
+  final VoidCallback? onWayfinding;
+  final VoidCallback? onMyInfo;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFF1F5F9)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0F1E3A8A),
+            blurRadius: 14,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(left: 4),
+            child: Text(
+              '바로가기 서비스',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF94A3B8),
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _ShortcutItem(
+                  label: '예약',
+                  icon: Icons.calendar_month_rounded,
+                  bg: const Color(0xFFEFF6FF),
+                  iconColor: AppColors.secondary,
+                  onTap: onReservation,
+                ),
+              ),
+              Expanded(
+                child: _ShortcutItem(
+                  label: '검사',
+                  icon: Icons.assignment_turned_in_rounded,
+                  bg: const Color(0xFFEEF2FF),
+                  iconColor: const Color(0xFF4F46E5),
+                  onTap: onExam,
+                ),
+              ),
+              Expanded(
+                child: _ShortcutItem(
+                  label: '길찾기',
+                  icon: Icons.map_rounded,
+                  bg: const Color(0xFFF0F9FF),
+                  iconColor: const Color(0xFF0284C7),
+                  onTap: onWayfinding,
+                ),
+              ),
+              Expanded(
+                child: _ShortcutItem(
+                  label: '내 정보',
+                  icon: Icons.person_outline_rounded,
+                  bg: const Color(0xFFFFF1F2),
+                  iconColor: AppColors.accent,
+                  onTap: onMyInfo,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShortcutItem extends StatelessWidget {
+  const _ShortcutItem({
     required this.label,
+    required this.icon,
+    required this.bg,
+    required this.iconColor,
     this.onTap,
   });
 
-  final IconData icon;
   final String label;
+  final IconData icon;
+  final Color bg;
+  final Color iconColor;
   final VoidCallback? onTap;
 
   @override
@@ -354,21 +479,25 @@ class _QuickAction extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
-      child: Ink(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.lightBlue),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
           children: [
-            Icon(icon, color: AppColors.primary),
-            const SizedBox(height: 6),
+            // 아이콘 크게
+            Container(
+              width: 58,
+              height: 58,
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Icon(icon, size: 30, color: iconColor),
+            ),
+            const SizedBox(height: 8),
             Text(
               label,
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w700,
                 color: AppColors.text,
               ),
@@ -391,24 +520,23 @@ class _StepsCard extends StatefulWidget {
 
 class _StepsCardState extends State<_StepsCard> {
   static const int _targetSteps = 10000;
-
   late final StepCounterService _stepService;
 
   @override
   void initState() {
     super.initState();
     _stepService = StepCounterService();
-    _stepService.addListener(_onStepsChanged);
+    _stepService.addListener(_refresh);
     _stepService.initialize();
   }
 
-  void _onStepsChanged() {
+  void _refresh() {
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _stepService.removeListener(_onStepsChanged);
+    _stepService.removeListener(_refresh);
     super.dispose();
   }
 
@@ -418,53 +546,82 @@ class _StepsCardState extends State<_StepsCard> {
     final progress = (steps / _targetSteps).clamp(0.0, 1.0);
     final formatter = NumberFormat('#,###');
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: widget.onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Ink(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(18, 16, 14, 16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: const LinearGradient(
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-              colors: [
-                Color(0xFFDCEBFF),
-                Color(0xFFFFE4EC),
-              ],
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x141E3A8A),
-                blurRadius: 14,
-                offset: Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Row(
+    // 보미가 카드 밖으로 살짝 튀어나오게
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, right: 4),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Stack(
+            clipBehavior: Clip.none,
             children: [
-              Expanded(
+              Ink(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(16, 16, 110, 14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  gradient: const LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      Color(0xFFEFF6FF),
+                      Color(0xFFF0F9FF),
+                      Color(0xFFFDF2F8),
+                    ],
+                  ),
+                  border: Border.all(color: const Color(0xFFDBEAFE)),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x141E3A8A),
+                      blurRadius: 14,
+                      offset: Offset(0, 6),
+                    ),
+                  ],
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '${formatter.format(steps)} / ${formatter.format(_targetSteps)} 걸음',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.text,
-                      ),
+                    const Row(
+                      children: [
+                        Icon(
+                          Icons.directions_walk_rounded,
+                          size: 16,
+                          color: AppColors.secondary,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          '오늘의 활동',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      '오늘도 열심히 걸어봐요!',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary,
+                    const SizedBox(height: 8),
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: formatter.format(steps),
+                            style: const TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.text,
+                            ),
+                          ),
+                          TextSpan(
+                            text: ' / ${formatter.format(_targetSteps)} 걸음',
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -472,36 +629,135 @@ class _StepsCardState extends State<_StepsCard> {
                       borderRadius: BorderRadius.circular(999),
                       child: LinearProgressIndicator(
                         value: progress,
-                        minHeight: 8,
-                        backgroundColor: Colors.white.withValues(alpha: 0.7),
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          AppColors.secondary,
-                        ),
+                        minHeight: 10,
+                        backgroundColor: Colors.white.withValues(alpha: 0.85),
+                        valueColor:
+                            const AlwaysStoppedAnimation(AppColors.secondary),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      '오늘도 열심히 걸어봐요! 💪',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 10),
-              Image.asset(
-                'assets/images/bomi_cheer.png',
-                width: 78,
-                height: 78,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => Image.asset(
-                  'assets/images/mascot/bomi_cheer.png',
-                  width: 78,
-                  height: 78,
-                  errorBuilder: (_, __, ___) => const Icon(
-                    Icons.directions_walk_rounded,
-                    size: 56,
-                    color: AppColors.primary,
+              // 큰 보미 오버랩
+              Positioned(
+                right: -6,
+                bottom: -10,
+                child: IgnorePointer(
+                  child: Image.asset(
+                    'assets/images/bomi_cheer.png',
+                    width: 118,
+                    height: 118,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => Image.asset(
+                      'assets/images/mascot/bomi_cheer.png',
+                      width: 118,
+                      height: 118,
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.favorite_rounded,
+                        size: 72,
+                        color: AppColors.accent,
+                      ),
+                    ),
                   ),
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _AiNoticeBanner extends StatelessWidget {
+  const _AiNoticeBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFDF2F8), Color(0xFFFFF1F2)],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFFBCFE8)),
+      ),
+      child: Row(
+        children: [
+          // 챗봇 아이콘 = 보미 얼굴
+          Container(
+            width: 42,
+            height: 42,
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: AppColors.accent,
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x33F59CB3),
+                  blurRadius: 8,
+                  offset: Offset(0, 3),
+                ),
+              ],
+            ),
+            child: ClipOval(
+              child: Image.asset(
+                'assets/images/bomi_wink.png',
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Image.asset(
+                  'assets/images/bomi_cheer.png',
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const Icon(
+                    Icons.smart_toy_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'AI 심혈관 건강 상담 서비스',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.text,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  '상담 및 진단 결과가 곧 연결될 예정이에요!',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFFBE185D),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Icon(
+            Icons.chevron_right_rounded,
+            color: Color(0xFFF472B6),
+            size: 18,
+          ),
+        ],
       ),
     );
   }
