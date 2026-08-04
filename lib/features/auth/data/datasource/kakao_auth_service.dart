@@ -52,6 +52,11 @@ class KakaoAuthService implements AuthRemoteDataSource {
     if (!installed) {
       try {
         return await UserApi.instance.loginWithKakaoAccount();
+      } on PlatformException catch (e) {
+        // 사용자가 닫거나 리다이렉트 중 취소된 경우 — 그대로 전달
+        if (e.code == 'CANCELED') rethrow;
+        debugPrint('Kakao account login failed: $e');
+        throw Exception('카카오 계정 로그인 실패: $e');
       } catch (e) {
         debugPrint('Kakao account login failed: $e');
         throw Exception('카카오 계정 로그인 실패: $e');
@@ -67,11 +72,16 @@ class KakaoAuthService implements AuthRemoteDataSource {
       debugPrint('KakaoTalk login failed, falling back to account login: $e');
       try {
         return await UserApi.instance.loginWithKakaoAccount();
+      } on PlatformException catch (accountError) {
+        if (accountError.code == 'CANCELED') rethrow;
+        debugPrint('Kakao account login failed: $accountError');
+        throw Exception('카카오 로그인 실패: $accountError');
       } catch (accountError) {
         debugPrint('Kakao account login failed: $accountError');
         throw Exception('카카오 로그인 실패: $accountError');
       }
     } catch (e) {
+      if (e is PlatformException && e.code == 'CANCELED') rethrow;
       debugPrint('KakaoTalk login failed: $e');
       throw Exception('카카오톡 로그인 실패: $e');
     }

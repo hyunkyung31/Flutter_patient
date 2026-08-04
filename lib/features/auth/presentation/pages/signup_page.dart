@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:patient_app/core/storage/secure_storage.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
 
+import '../../../home/view/home_page.dart';
 import '../../data/datasource/kakao_auth_service.dart';
 
 class SignupPage extends StatefulWidget {
@@ -90,12 +91,13 @@ class _SignupPageState extends State<SignupPage> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('회원가입 및 로그인 성공')),
+      // 로그인/회원가입 스택 제거하고 홈으로 이동
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => HomePage(patientName: result.patientName ?? name),
+        ),
+        (_) => false,
       );
-
-      // TODO: 홈으로 이동
-      Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
       setState(() {
