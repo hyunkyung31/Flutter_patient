@@ -21,22 +21,27 @@ class KakaoAuthService implements AuthRemoteDataSource {
     try {
       final response = await ApiClient.dio.post(
         ApiEndpoints.kakaoLogin,
-        data: {'accessToken': token.accessToken},
+        data: {
+          'accessToken': token.accessToken,
+        },
       );
 
-      final data = response.data;
-      if (data is! Map) {
-        throw Exception('서버 응답 형식이 올바르지 않습니다. (${data.runtimeType})');
-      }
-
-      return LoginResponse.fromJson(Map<String, dynamic>.from(data));
+      return _parseLoginResponse(response.data);
     } on DioException catch (e) {
       debugPrint(
         'Kakao backend login failed: type=${e.type}, '
         'status=${e.response?.statusCode}, url=$requestUrl, '
         'data=${e.response?.data}',
       );
-      throw Exception(_mapDioError(e, requestUrl));
+
+      // 일부 백엔드는 신규 유저를 404/400 + signup_token 으로 내려줌
+      final recovered = _tryParseNewUserFromError(e);
+      if (recovered != null) {
+        debugPrint('Recovered new-user login response from error body');
+        return recovered;
+      }
+
+      throw Exception(_mapDioError(e, requestUrl, actionLabel: '로그인'));
     }
   }
 
@@ -47,6 +52,11 @@ class KakaoAuthService implements AuthRemoteDataSource {
     if (!installed) {
       try {
         return await UserApi.instance.loginWithKakaoAccount();
+      } on PlatformException catch (e) {
+        // 사용자가 닫거나 리다이렉트 중 취소된 경우 — 그대로 전달
+        if (e.code == 'CANCELED') rethrow;
+        debugPrint('Kakao account login failed: $e');
+        throw Exception('카카오 계정 로그인 실패: $e');
       } catch (e) {
         debugPrint('Kakao account login failed: $e');
         throw Exception('카카오 계정 로그인 실패: $e');
@@ -62,17 +72,47 @@ class KakaoAuthService implements AuthRemoteDataSource {
       debugPrint('KakaoTalk login failed, falling back to account login: $e');
       try {
         return await UserApi.instance.loginWithKakaoAccount();
+      } on PlatformException catch (accountError) {
+        if (accountError.code == 'CANCELED') rethrow;
+        debugPrint('Kakao account login failed: $accountError');
+        throw Exception('카카오 로그인 실패: $accountError');
       } catch (accountError) {
         debugPrint('Kakao account login failed: $accountError');
         throw Exception('카카오 로그인 실패: $accountError');
       }
     } catch (e) {
+      if (e is PlatformException && e.code == 'CANCELED') rethrow;
       debugPrint('KakaoTalk login failed: $e');
       throw Exception('카카오톡 로그인 실패: $e');
     }
   }
 
-  String _mapDioError(DioException e, String requestUrl) {
+  LoginResponse _parseLoginResponse(dynamic data) {
+    if (data is! Map) {
+      throw Exception(
+        '서버 응답 형식이 올바르지 않습니다. (${data.runtimeType})',
+      );
+    }
+    return LoginResponse.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  LoginResponse? _tryParseNewUserFromError(DioException e) {
+    final status = e.response?.statusCode;
+    if (status == null || status < 400 || status >= 500) return null;
+
+    final data = e.response?.data;
+    if (data is! Map) return null;
+
+    final parsed = LoginResponse.fromJson(Map<String, dynamic>.from(data));
+    if (parsed.needsSignup) return parsed;
+    return null;
+  }
+
+  String _mapDioError(
+    DioException e,
+    String requestUrl, {
+    String actionLabel = '로그인',
+  }) {
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
@@ -80,14 +120,54 @@ class KakaoAuthService implements AuthRemoteDataSource {
       case DioExceptionType.connectionError:
         return '서버 연결 실패\n$requestUrl\nAPI_BASE_URL을 확인해주세요.';
       case DioExceptionType.badResponse:
-        final data = e.response?.data;
-        if (data is Map && data['message'] != null) {
-          return '서버 로그인 실패 (${e.response?.statusCode})\n${data['message']}';
+        final message = _extractServerMessage(e.response?.data);
+        if (message != null) {
+          return '서버 $actionLabel 실패 (${e.response?.statusCode})\n$message';
         }
-        return '서버 로그인 실패 (${e.response?.statusCode})\n$requestUrl';
+        return '서버 $actionLabel 실패 (${e.response?.statusCode})\n$requestUrl';
       default:
-        return '서버 로그인 실패\n$requestUrl\n${e.message ?? e.type}';
+        return '서버 $actionLabel 실패\n$requestUrl\n${e.message ?? e.type}';
     }
+  }
+
+  String? _extractServerMessage(dynamic data) {
+    if (data is! Map) return null;
+    for (final key in ['message', 'detail', 'error']) {
+      final value = data[key];
+      if (value == null) continue;
+      final text = value.toString().trim();
+      if (text.isNotEmpty) return text;
+    }
+    return null;
+  }
+
+  /// 010 - 1234 - 5678 / 010-1234-5678 → 01012345678
+  String _normalizePhone(String phone) {
+    return phone.replaceAll(RegExp(r'[^0-9]'), '');
+  }
+
+  /// 1992-10-31 / 1992.10.31 / 921031 / 19921031 → YYYY-MM-DD 우선
+  String _normalizeBirthDate(String birthDate) {
+    final raw = birthDate.trim();
+    final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+
+    if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(raw)) {
+      return raw;
+    }
+
+    if (digits.length == 8) {
+      // YYYYMMDD → YYYY-MM-DD
+      return '${digits.substring(0, 4)}-${digits.substring(4, 6)}-${digits.substring(6, 8)}';
+    }
+
+    if (digits.length == 6) {
+      // YYMMDD → 19xx/20xx 추정
+      final yy = int.parse(digits.substring(0, 2));
+      final year = yy >= 50 ? 1900 + yy : 2000 + yy;
+      return '$year-${digits.substring(2, 4)}-${digits.substring(4, 6)}';
+    }
+
+    return raw;
   }
 
   @override
@@ -100,35 +180,47 @@ class KakaoAuthService implements AuthRemoteDataSource {
     required String signupToken,
     required String phone,
     required String birthDate,
-    required String name,
+    String? name,
   }) async {
     final requestUrl = '${AppConfig.apiBaseUrl}${ApiEndpoints.kakaoSignup}';
+    final normalizedPhone = _normalizePhone(phone);
+    final normalizedBirth = _normalizeBirthDate(birthDate);
+    final normalizedName = name?.trim() ?? '';
+
+    if (normalizedName.isEmpty) {
+      throw Exception('이름을 입력해주세요.');
+    }
+    if (normalizedPhone.length < 10 || normalizedPhone.length > 11) {
+      throw Exception('전화번호 형식이 올바르지 않습니다. (예: 01012345678)');
+    }
+
     debugPrint('Backend signup request: POST $requestUrl');
+    debugPrint(
+      'signup payload: phone=$normalizedPhone, birthDate=$normalizedBirth, '
+      'name=$normalizedName',
+    );
 
     try {
       final response = await ApiClient.dio.post(
         ApiEndpoints.kakaoSignup,
         data: {
           'signupToken': signupToken,
-          'phone': phone,
-          'birthDate': birthDate,
-          'name': name,
+          'phone': normalizedPhone,
+          'birthDate': normalizedBirth,
+          'name': normalizedName,
         },
       );
 
-      final data = response.data;
-      if (data is! Map) {
-        throw Exception('서버 응답 형식이 올바르지 않습니다. (${data.runtimeType})');
-      }
-
-      return LoginResponse.fromJson(Map<String, dynamic>.from(data));
+      return _parseLoginResponse(response.data);
     } on DioException catch (e) {
       debugPrint(
         'Kakao signup failed: type=${e.type}, '
         'status=${e.response?.statusCode}, url=$requestUrl, '
         'data=${e.response?.data}',
       );
-      throw Exception(_mapDioError(e, requestUrl));
+      throw Exception(
+        _mapDioError(e, requestUrl, actionLabel: '회원가입'),
+      );
     }
   }
 
