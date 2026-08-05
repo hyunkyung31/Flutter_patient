@@ -4,10 +4,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../constants/storage_keys.dart';
 
 class SecureStorageService {
-  // Android: EncryptedSharedPreferences 로 기기 재시작 후에도 세션 유지
+  // Android AES-GCM + 오류 시 복구. 재시작 후에도 세션 유지.
   static const FlutterSecureStorage _storage = FlutterSecureStorage(
     aOptions: AndroidOptions(
-      encryptedSharedPreferences: true,
+      resetOnError: true,
+      migrateOnAlgorithmChange: true,
     ),
     iOptions: IOSOptions(
       accessibility: KeychainAccessibility.first_unlock,
