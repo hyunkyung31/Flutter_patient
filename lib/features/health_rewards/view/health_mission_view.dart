@@ -23,7 +23,7 @@ class _HealthMissionViewState extends State<HealthMissionView> {
 
   bool isHospitalVisitConfirmed = true;
 
-  final int targetSteps = 6000;
+  final int targetSteps = 10000;
 
   @override
   void initState() {
@@ -388,7 +388,7 @@ class _HealthMissionViewState extends State<HealthMissionView> {
         builder: (context) {
           return MissionListView(
             controller: controller,
-            currentSteps: stepCounterService.currentSteps,
+            stepCounterService: stepCounterService,
             targetSteps: targetSteps,
             isHospitalVisitConfirmed: isHospitalVisitConfirmed,
             onWaterMissionPressed: _confirmWaterMission,
@@ -466,8 +466,10 @@ class _HealthMissionViewState extends State<HealthMissionView> {
       return;
     }
 
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+
+    messenger
+      ..clearSnackBars()
       ..showSnackBar(
         SnackBar(
           content: const Row(
@@ -477,18 +479,11 @@ class _HealthMissionViewState extends State<HealthMissionView> {
               Expanded(child: Text('봄꽃 정원 배경을 구매하고 바로 적용했어요.')),
             ],
           ),
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 2),
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.all(16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
-          ),
-          action: SnackBarAction(
-            label: '정원 보기',
-            textColor: const Color(0xFFFFD7E4),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
           ),
         ),
       );

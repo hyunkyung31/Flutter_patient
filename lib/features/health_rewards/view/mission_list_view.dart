@@ -4,12 +4,13 @@ import '../controller/health_mission_controller.dart';
 import '../widgets/health_action_card.dart';
 import '../widgets/hospital_mission_card.dart';
 import '../widgets/walking_mission_card.dart';
+import '../services/step_counter_service.dart';
 
 class MissionListView extends StatelessWidget {
   const MissionListView({
     super.key,
     required this.controller,
-    required this.currentSteps,
+    required this.stepCounterService,
     required this.targetSteps,
     required this.isHospitalVisitConfirmed,
     required this.onWaterMissionPressed,
@@ -20,7 +21,7 @@ class MissionListView extends StatelessWidget {
 
   final HealthMissionController controller;
 
-  final int currentSteps;
+  final StepCounterService stepCounterService;
   final int targetSteps;
   final bool isHospitalVisitConfirmed;
 
@@ -32,8 +33,10 @@ class MissionListView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: controller,
+      animation: Listenable.merge([controller, stepCounterService]),
       builder: (context, child) {
+        final int currentSteps = stepCounterService.currentSteps;
+
         return Scaffold(
           backgroundColor: const Color(0xFFF7F8FA),
           appBar: AppBar(

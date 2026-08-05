@@ -3,12 +3,17 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:pedometer/pedometer.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class StepCounterService extends ChangeNotifier {
+  static const String _savedStepsKey = 'health_today_steps';
+  static const String _lastSensorStepsKey = 'health_last_sensor_steps';
+  static const String _savedDateKey = 'health_steps_saved_date';
+
   StreamSubscription<StepCount>? _stepCountSubscription;
 
   int _currentSteps = 0;
-  int? _sensorStartSteps;
+  int? _lastSensorSteps;
 
   bool _isInitialized = false;
   bool _isPermissionGranted = false;
@@ -32,11 +37,11 @@ class StepCounterService extends ChangeNotifier {
     _isInitialized = true;
     _errorMessage = null;
 
+    await _loadSavedSteps();
     notifyListeners();
 
-    final PermissionStatus permissionStatus = await Permission
-        .activityRecognition
-        .request();
+    final PermissionStatus permissionStatus =
+        await Permission.activityRecognition.request();
 
     _isPermissionGranted = permissionStatus.isGranted;
 
@@ -50,6 +55,33 @@ class StepCounterService extends ChangeNotifier {
     }
 
     _startPedometerStream();
+  }
+
+  Future<void> _loadSavedSteps() async {
+    final SharedPreferences preferences =
+        await SharedPreferences.getInstance();
+
+    final String today = _formatDate(DateTime.now());
+    final String? savedDate = preferences.getString(_savedDateKey);
+
+    if (savedDate == today) {
+      _currentSteps = preferences.getInt(_savedStepsKey) ?? 0;
+      _lastSensorSteps = preferences.getInt(_lastSensorStepsKey);
+
+      debugPrint(
+        '저장된 걸음 수 복원: $_currentSteps '
+        '(이전 센서값: $_lastSensorSteps)',
+      );
+    } else {
+      _currentSteps = 0;
+      _lastSensorSteps = null;
+
+      await preferences.setInt(_savedStepsKey, 0);
+      await preferences.remove(_lastSensorStepsKey);
+      await preferences.setString(_savedDateKey, today);
+
+      debugPrint('날짜 변경으로 걸음 수를 초기화했습니다.');
+    }
   }
 
   void _startPedometerStream() {
@@ -70,30 +102,94 @@ class StepCounterService extends ChangeNotifier {
     }
   }
 
-  void _onStepCount(StepCount event) {
+  Future<void> _onStepCount(StepCount event) async {
     _isSensorAvailable = true;
     _errorMessage = null;
 
     final int sensorSteps = event.steps;
+    final String today = _formatDate(DateTime.now());
 
-    // 첫 센서 값을 앱 실행 시점의 기준값으로 사용합니다.
-    _sensorStartSteps ??= sensorSteps;
+    final SharedPreferences preferences =
+        await SharedPreferences.getInstance();
 
-    // 휴대전화 재부팅 등으로 센서 누적값이 작아진 경우 기준점을 다시 잡습니다.
-    if (sensorSteps < _sensorStartSteps!) {
-      _sensorStartSteps = sensorSteps;
+    final String? savedDate = preferences.getString(_savedDateKey);
+
+    if (savedDate != today) {
+      _currentSteps = 0;
+      _lastSensorSteps = sensorSteps;
+
+      await _saveSteps(
+        sensorSteps: sensorSteps,
+        date: today,
+      );
+
+      debugPrint('새 날짜의 센서 기준값 설정: $sensorSteps');
+      notifyListeners();
+      return;
     }
 
-    final int calculatedSteps = sensorSteps - _sensorStartSteps!;
+    if (_lastSensorSteps == null) {
+      _lastSensorSteps = sensorSteps;
 
-    _currentSteps = calculatedSteps < 0 ? 0 : calculatedSteps;
+      await _saveSteps(
+        sensorSteps: sensorSteps,
+        date: today,
+      );
+
+      debugPrint(
+        '첫 센서 기준값 설정: $sensorSteps '
+        '(복원된 걸음 수: $_currentSteps)',
+      );
+
+      notifyListeners();
+      return;
+    }
+
+    if (sensorSteps >= _lastSensorSteps!) {
+      final int increasedSteps = sensorSteps - _lastSensorSteps!;
+
+      _currentSteps += increasedSteps;
+    } else {
+      // 휴대전화 재부팅 등으로 센서 누적값이 초기화된 경우입니다.
+      debugPrint(
+        '센서 누적값 초기화 감지 '
+        '(이전: $_lastSensorSteps / 현재: $sensorSteps)',
+      );
+    }
+
+    _lastSensorSteps = sensorSteps;
+
+    await _saveSteps(
+      sensorSteps: sensorSteps,
+      date: today,
+    );
 
     debugPrint(
       '걸음 수 업데이트: $_currentSteps '
-      '(센서 전체: $sensorSteps / 시작값: $_sensorStartSteps)',
+      '(센서 전체: $sensorSteps)',
     );
 
     notifyListeners();
+  }
+
+  Future<void> _saveSteps({
+    required int sensorSteps,
+    required String date,
+  }) async {
+    final SharedPreferences preferences =
+        await SharedPreferences.getInstance();
+
+    await preferences.setInt(_savedStepsKey, _currentSteps);
+    await preferences.setInt(_lastSensorStepsKey, sensorSteps);
+    await preferences.setString(_savedDateKey, date);
+  }
+
+  String _formatDate(DateTime dateTime) {
+    final String year = dateTime.year.toString();
+    final String month = dateTime.month.toString().padLeft(2, '0');
+    final String day = dateTime.day.toString().padLeft(2, '0');
+
+    return '$year-$month-$day';
   }
 
   void _onStepCountError(Object error) {
@@ -105,15 +201,36 @@ class StepCounterService extends ChangeNotifier {
   }
 
   /// 에뮬레이터와 발표 테스트용입니다.
-  void setTestSteps(int steps) {
+  Future<void> setTestSteps(int steps) async {
     _currentSteps = steps < 0 ? 0 : steps;
+
+    final SharedPreferences preferences =
+        await SharedPreferences.getInstance();
+
+    await preferences.setInt(_savedStepsKey, _currentSteps);
+    await preferences.setString(
+      _savedDateKey,
+      _formatDate(DateTime.now()),
+    );
+
     notifyListeners();
   }
 
-  /// 실제 센서 기준값을 다시 설정합니다.
-  void resetSessionSteps() {
-    _sensorStartSteps = null;
+  /// 오늘 걸음 수 저장값을 초기화합니다.
+  Future<void> resetTodaySteps() async {
     _currentSteps = 0;
+    _lastSensorSteps = null;
+
+    final SharedPreferences preferences =
+        await SharedPreferences.getInstance();
+
+    await preferences.setInt(_savedStepsKey, 0);
+    await preferences.remove(_lastSensorStepsKey);
+    await preferences.setString(
+      _savedDateKey,
+      _formatDate(DateTime.now()),
+    );
+
     notifyListeners();
   }
 
