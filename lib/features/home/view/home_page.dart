@@ -1,17 +1,32 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
 
 import '../../health_rewards/services/step_counter_service.dart';
-import '../../wayfinding/view/wayfinding_page.dart';
+import 'package:patient_app/features/ai_consultation/widgets/ai_consultation_preview.dart';
+
+// 시간대별 이미지 선택 함수
+String _getWelcomeBomiImage(DateTime now) {
+  final int hour = now.hour;
+
+  // 아침: 05:00 ~ 11:59
+  if (hour >= 5 && hour < 12) {
+    return 'assets/images/bomi_morning.png';
+  }
+
+  // 낮·오후: 12:00 ~ 18:59
+  if (hour >= 12 && hour < 19) {
+    return 'assets/images/bomi_afternoon.png';
+  }
+
+  // 저녁·밤·새벽: 19:00 ~ 다음 날 04:59
+  return 'assets/images/bomi_evening.png';
+}
 
 /// 홈 탭 (시안 피드백 반영)
 class HomePage extends StatelessWidget {
-  const HomePage({
-    super.key,
-    this.patientName,
-    this.onOpenTab,
-  });
+  const HomePage({super.key, this.patientName, this.onOpenTab});
 
   final String? patientName;
 
@@ -42,23 +57,16 @@ class HomePage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _ShortcutsSection(
-                  onReservation: () => onOpenTab?.call(1),
-                  onExam: () => onOpenTab?.call(2),
-                  onWayfinding: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const WayfindingPage(),
-                      ),
-                    );
-                  },
-                  onMyInfo: () => onOpenTab?.call(4),
-                ),
-                const SizedBox(height: 12),
                 // 걸음수 카드 (보미 크게 오버랩) → 건강정원
                 _StepsCard(onTap: () => onOpenTab?.call(3)),
                 const SizedBox(height: 12),
-                const _AiNoticeBanner(),
+                AiConsultationPreview(
+                  onQuestionSubmitted: (question) {
+                    debugPrint('선택한 AI 상담 질문: $question');
+
+                    // TODO: 팀장님이 AI 답변 화면 이동 또는 AI 처리 코드 연결
+                  },
+                ),
               ],
             ),
           ),
@@ -103,9 +111,9 @@ class _HomeHeader extends StatelessWidget {
           const Spacer(),
           IconButton(
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('새로운 건강 알림이 있습니다.')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('새로운 건강 알림이 있습니다.')));
             },
             icon: const Badge(
               smallSize: 8,
@@ -126,13 +134,53 @@ class _HomeHeader extends StatelessWidget {
   }
 }
 
-class _WelcomeCard extends StatelessWidget {
+class _WelcomeCard extends StatefulWidget {
   const _WelcomeCard({required this.name});
 
   final String name;
 
   @override
+  State<_WelcomeCard> createState() => _WelcomeCardState();
+}
+
+class _WelcomeCardState extends State<_WelcomeCard> {
+  Timer? _timeTimer;
+  late String _bomiImage;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _bomiImage = _getWelcomeBomiImage(DateTime.now());
+
+    // 시간 변경을 빠르게 감지
+    _timeTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _checkTimeImage(),
+    );
+  }
+
+  void _checkTimeImage() {
+    final String nextImage = _getWelcomeBomiImage(DateTime.now());
+
+    // 이미지가 실제로 달라질 때만 화면 갱신
+    if (nextImage != _bomiImage && mounted) {
+      setState(() {
+        _bomiImage = nextImage;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timeTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final String bomiImage = _bomiImage;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 16, 10, 16),
@@ -155,8 +203,10 @@ class _WelcomeCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.lightBlue,
                     borderRadius: BorderRadius.circular(999),
@@ -193,7 +243,7 @@ class _WelcomeCard extends StatelessWidget {
                     children: [
                       const TextSpan(text: '안녕하세요, '),
                       TextSpan(
-                        text: '$name님',
+                        text: '${widget.name}님',
                         style: const TextStyle(color: AppColors.primary),
                       ),
                       const TextSpan(text: ' 👋'),
@@ -212,19 +262,26 @@ class _WelcomeCard extends StatelessWidget {
               ],
             ),
           ),
-          Image.asset(
-            'assets/images/bomi_wink.png',
-            width: 96,
-            height: 96,
-            fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => Image.asset(
-              'assets/images/bomi_cheer.png',
-              width: 96,
-              height: 96,
-              errorBuilder: (_, __, ___) => const Icon(
-                Icons.favorite_rounded,
-                size: 64,
-                color: AppColors.accent,
+          // 환영 카드 보미
+          SizedBox(
+            width: 112,
+            height: 112,
+            child: ClipRect(
+              child: Transform.translate(
+                offset: const Offset(-2, 6),
+                child: Transform.scale(
+                  scale: 1.55,
+                  alignment: Alignment.center,
+                  child: Image.asset(
+                    bomiImage,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.favorite_rounded,
+                      size: 64,
+                      color: AppColors.accent,
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -235,10 +292,7 @@ class _WelcomeCard extends StatelessWidget {
 }
 
 class _SummaryCards extends StatelessWidget {
-  const _SummaryCards({
-    this.onReservation,
-    this.onExamHistory,
-  });
+  const _SummaryCards({this.onReservation, this.onExamHistory});
 
   final VoidCallback? onReservation;
   final VoidCallback? onExamHistory;
@@ -367,148 +421,6 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
-class _ShortcutsSection extends StatelessWidget {
-  const _ShortcutsSection({
-    this.onReservation,
-    this.onExam,
-    this.onWayfinding,
-    this.onMyInfo,
-  });
-
-  final VoidCallback? onReservation;
-  final VoidCallback? onExam;
-  final VoidCallback? onWayfinding;
-  final VoidCallback? onMyInfo;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFF1F5F9)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0F1E3A8A),
-            blurRadius: 14,
-            offset: Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.only(left: 4),
-            child: Text(
-              '바로가기 서비스',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF94A3B8),
-                letterSpacing: 0.5,
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _ShortcutItem(
-                  label: '예약',
-                  icon: Icons.calendar_month_rounded,
-                  bg: const Color(0xFFEFF6FF),
-                  iconColor: AppColors.secondary,
-                  onTap: onReservation,
-                ),
-              ),
-              Expanded(
-                child: _ShortcutItem(
-                  label: '검사',
-                  icon: Icons.assignment_turned_in_rounded,
-                  bg: const Color(0xFFEEF2FF),
-                  iconColor: const Color(0xFF4F46E5),
-                  onTap: onExam,
-                ),
-              ),
-              Expanded(
-                child: _ShortcutItem(
-                  label: '길찾기',
-                  icon: Icons.map_rounded,
-                  bg: const Color(0xFFF0F9FF),
-                  iconColor: const Color(0xFF0284C7),
-                  onTap: onWayfinding,
-                ),
-              ),
-              Expanded(
-                child: _ShortcutItem(
-                  label: '내 정보',
-                  icon: Icons.person_outline_rounded,
-                  bg: const Color(0xFFFFF1F2),
-                  iconColor: AppColors.accent,
-                  onTap: onMyInfo,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ShortcutItem extends StatelessWidget {
-  const _ShortcutItem({
-    required this.label,
-    required this.icon,
-    required this.bg,
-    required this.iconColor,
-    this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final Color bg;
-  final Color iconColor;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Column(
-          children: [
-            // 아이콘 크게
-            Container(
-              width: 58,
-              height: 58,
-              decoration: BoxDecoration(
-                color: bg,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Icon(icon, size: 30, color: iconColor),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                color: AppColors.text,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _StepsCard extends StatefulWidget {
   const _StepsCard({this.onTap});
 
@@ -631,8 +543,9 @@ class _StepsCardState extends State<_StepsCard> {
                         value: progress,
                         minHeight: 10,
                         backgroundColor: Colors.white.withValues(alpha: 0.85),
-                        valueColor:
-                            const AlwaysStoppedAnimation(AppColors.secondary),
+                        valueColor: const AlwaysStoppedAnimation(
+                          AppColors.secondary,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -649,23 +562,19 @@ class _StepsCardState extends State<_StepsCard> {
               ),
               // 큰 보미 오버랩
               Positioned(
-                right: -6,
-                bottom: -10,
+                right: -2,
+                bottom: -6,
                 child: IgnorePointer(
                   child: Image.asset(
-                    'assets/images/bomi_cheer.png',
-                    width: 118,
-                    height: 118,
+                    'assets/images/bomi_walking_cheer.png',
+                    width: 126,
+                    height: 126,
                     fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => Image.asset(
-                      'assets/images/mascot/bomi_cheer.png',
-                      width: 118,
-                      height: 118,
-                      errorBuilder: (_, __, ___) => const Icon(
-                        Icons.favorite_rounded,
-                        size: 72,
-                        color: AppColors.accent,
-                      ),
+                    alignment: Alignment.center,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.favorite_rounded,
+                      size: 72,
+                      color: AppColors.accent,
                     ),
                   ),
                 ),

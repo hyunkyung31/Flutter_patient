@@ -51,10 +51,7 @@ class _SplashScreenState extends State<SplashScreen>
       duration: const Duration(milliseconds: 900),
     );
 
-    _fadeIn = CurvedAnimation(
-      parent: _enter,
-      curve: Curves.easeOut,
-    );
+    _fadeIn = CurvedAnimation(parent: _enter, curve: Curves.easeOut);
 
     _logoScale = Tween<double>(begin: 0.92, end: 1.0).animate(
       CurvedAnimation(
@@ -112,12 +109,7 @@ class _SplashScreenState extends State<SplashScreen>
         final patientId = await SecureStorageService.getPatientId();
         if (!mounted) return;
         Navigator.of(context).pushReplacement(
-          _fadeRoute(
-            MainShellPage(
-              patientName: name,
-              patientId: patientId,
-            ),
-          ),
+          _fadeRoute(MainShellPage(patientName: name, patientId: patientId)),
         );
         return;
       }
@@ -130,9 +122,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   void _openLogin() {
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      _fadeRoute(const LoginPage()),
-    );
+    Navigator.of(context).pushReplacement(_fadeRoute(const LoginPage()));
   }
 
   PageRouteBuilder _fadeRoute(Widget page) {
@@ -157,8 +147,10 @@ class _SplashScreenState extends State<SplashScreen>
     final size = MediaQuery.sizeOf(context);
     final bottomInset = MediaQuery.paddingOf(context).bottom;
 
-    // 캐릭터 크게 + 모서리로 많이 잘리게 (까꿍)
-    final bomiH = (size.height * 0.40).clamp(250.0, 350.0);
+    // 현재 작업 중인 에뮬레이터 크기를 기준으로 한 반응형 배율
+    final widthScale = (size.width / 393).clamp(0.90, 1.10);
+    final heightScale = (size.height / 852).clamp(0.90, 1.10);
+    final textScale = widthScale;
 
     return Scaffold(
       backgroundColor: dustyRose,
@@ -168,64 +160,75 @@ class _SplashScreenState extends State<SplashScreen>
           return Stack(
             children: [
               // 1) 중앙: 슬로건 + 로고 + 로딩바
-              SafeArea(
+              Positioned(
+                top: size.height * 0.335,
+                left: 24 * widthScale,
+                right: 24 * widthScale,
                 child: FadeTransition(
                   opacity: _fadeIn,
-                  child: Align(
-                    alignment: const Alignment(0, -0.35),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text(
-                            '건강한 오늘이 더 좋은 내일로 이어지도록',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: onRose,
-                              fontSize: 16,
-                              height: 1.45,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                          const SizedBox(height: 28),
-                          Transform.scale(
-                            scale: _logoScale.value,
-                            child: Image.asset(
-                              'assets/images/splash_vena_white.png',
-                              width: 150,
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                          const SizedBox(height: 22),
-                          _LoadingBar(progress: _progress.value),
-                        ],
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '건강한 오늘이 더 좋은 내일로 이어지도록',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: onRose,
+                          fontSize: 19 * textScale,
+                          height: 1.4,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.4,
+                        ),
                       ),
-                    ),
+
+                      SizedBox(height: 30 * heightScale),
+
+                      Transform.scale(
+                        scale: _logoScale.value,
+                        child: Image.asset(
+                          'assets/images/splash_vena_white.png',
+                          width: size.width * 0.62,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+
+                      SizedBox(height: 36 * heightScale),
+
+                      _LoadingBar(
+                        progress: _progress.value,
+                        width: size.width * 0.64,
+                        heightScale: heightScale,
+                      ),
+                    ],
                   ),
                 ),
               ),
 
               // 2) 우측 하단 보미 (크게 + 구석으로 자름)
               Positioned(
-                right: -50,
-                bottom: -40,
-                child: Opacity(
-                  opacity: _bomiOpacity.value,
-                  child: Image.asset(
-                    'assets/images/bomi_peek.png',
-                    height: bomiH,
-                    fit: BoxFit.contain,
+                right: -180 * widthScale,
+                bottom: -50 * heightScale,
+                child: FadeTransition(
+                  opacity: _bomiOpacity,
+                  child: IgnorePointer(
+                    child: Transform.rotate(
+                      angle: -0.2,
+                      alignment: Alignment.bottomCenter,
+                      child: Image.asset(
+                        'assets/images/bomi_peek.png',
+                        width: size.width * 1.08,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
                   ),
                 ),
               ),
 
               // 3) 하단 영문 + 버전
               Positioned(
-                left: 24,
-                right: 24,
-                bottom: bottomInset + 16,
+                left: 24 * widthScale,
+                right: 24 * widthScale,
+                bottom: bottomInset + (34 * heightScale),
                 child: FadeTransition(
                   opacity: _fadeIn,
                   child: const Column(
@@ -264,25 +267,34 @@ class _SplashScreenState extends State<SplashScreen>
 }
 
 class _LoadingBar extends StatelessWidget {
-  const _LoadingBar({required this.progress});
+  const _LoadingBar({
+    required this.progress,
+    required this.width,
+    required this.heightScale,
+  });
 
   final double progress;
+  final double width;
+  final double heightScale;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 150,
-      height: 7,
+      width: width,
+      height: 20 * heightScale,
       decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.10),
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withOpacity(0.45), width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.white.withOpacity(0.35),
-            blurRadius: 10,
-            spreadRadius: 0.5,
+            color: Colors.white.withOpacity(0.25),
+            blurRadius: 12,
+            spreadRadius: 1,
           ),
         ],
       ),
+      padding: EdgeInsets.all(4 * heightScale),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(999),
         child: Stack(
