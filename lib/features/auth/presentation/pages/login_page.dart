@@ -62,21 +62,28 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      // 기존 회원 → 토큰 저장 후 홈
-      await SecureStorageService.saveToken(
+      // 기존 회원 → 토큰/프로필 저장 후 홈 (자동로그인 기본 ON)
+      await SecureStorageService.saveSession(
         access: result.access,
         refresh: result.refresh,
+        patientId: result.patientId,
+        patientName: result.patientName,
+        enableAutoLogin: true,
       );
       if (!mounted) return;
 
       debugPrint(
         'Login OK → MainShell '
-        'patient=${result.patientName}, accessLen=${result.access.length}',
+        'patient=${result.patientName}, id=${result.patientId}, '
+        'accessLen=${result.access.length}',
       );
 
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
-          builder: (_) => MainShellPage(patientName: result.patientName),
+          builder: (_) => MainShellPage(
+            patientName: result.patientName,
+            patientId: result.patientId,
+          ),
         ),
         (_) => false,
       );
@@ -193,16 +200,21 @@ class _LoginHeader extends StatelessWidget {
           semanticLabel: 'VENA',
           errorBuilder: (_, __, ___) {
             return Image.asset(
-              'assets/images/vena_text.png',
-              height: 56,
+              'assets/images/brand/vena_logo.png',
+              height: 88,
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const Text(
-                'vena',
-                style: TextStyle(
-                  fontSize: 48,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.accent,
-                  letterSpacing: 1.4,
+              errorBuilder: (_, __, ___) => Image.asset(
+                'assets/images/brand/vena_text.png',
+                height: 56,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Text(
+                  'vena',
+                  style: TextStyle(
+                    fontSize: 48,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.accent,
+                    letterSpacing: 1.4,
+                  ),
                 ),
               ),
             );

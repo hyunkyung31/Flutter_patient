@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
 
+import '../../health_rewards/view/health_mission_view.dart';
 import '../../mypage/view/my_page.dart';
 import '../../reservation/view/reservation_page.dart';
 import '../../result/view/exam_history_page.dart';
-import '../../wayfinding/view/wayfinding_page.dart';
 import 'home_page.dart';
 
-/// 환자앱 메인 뼈대 (하단 탭 5개 + 챗봇 FAB)
+/// 하단탭: 홈 / 예약 / 검사 / 건강정원 / 마이
 class MainShellPage extends StatefulWidget {
   const MainShellPage({
     super.key,
     this.patientName,
+    this.patientId,
     this.initialIndex = 0,
   });
 
   final String? patientName;
+  final String? patientId;
   final int initialIndex;
 
   @override
@@ -37,7 +39,7 @@ class _MainShellPageState extends State<MainShellPage> {
 
   void _openChatbot() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('AI 챗봇은 수빈 담당 기능으로 곧 연결됩니다.')),
+      const SnackBar(content: Text('AI 심혈관 도우미는 곧 연결됩니다.')),
     );
   }
 
@@ -49,9 +51,12 @@ class _MainShellPageState extends State<MainShellPage> {
         onOpenTab: _goToTab,
       ),
       const ReservationPage(),
-      const ExamHistoryPage(),
-      const WayfindingPage(),
-      MyPage(patientName: widget.patientName),
+      ExamHistoryPage(patientId: widget.patientId),
+      const HealthMissionView(),
+      MyPage(
+        patientName: widget.patientName,
+        patientId: widget.patientId,
+      ),
     ];
 
     return Scaffold(
@@ -63,14 +68,23 @@ class _MainShellPageState extends State<MainShellPage> {
       floatingActionButton: FloatingActionButton(
         onPressed: _openChatbot,
         backgroundColor: AppColors.accent,
-        elevation: 3,
-        child: Image.asset(
-          'assets/images/mascot/bomi_default.png',
-          width: 34,
-          height: 34,
-          errorBuilder: (_, __, ___) => const Icon(
-            Icons.smart_toy_rounded,
-            color: AppColors.white,
+        elevation: 4,
+        child: ClipOval(
+          child: Image.asset(
+            'assets/images/bomi_wink.png',
+            width: 40,
+            height: 40,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Image.asset(
+              'assets/images/bomi_cheer.png',
+              width: 40,
+              height: 40,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.smart_toy_rounded,
+                color: Colors.white,
+              ),
+            ),
           ),
         ),
       ),
@@ -100,9 +114,10 @@ class _MainShellPageState extends State<MainShellPage> {
             label: '검사',
           ),
           NavigationDestination(
-            icon: Icon(Icons.map_outlined),
-            selectedIcon: Icon(Icons.map_rounded, color: AppColors.primary),
-            label: '길찾기',
+            icon: Icon(Icons.local_florist_outlined),
+            selectedIcon:
+                Icon(Icons.local_florist_rounded, color: AppColors.primary),
+            label: '건강정원',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline_rounded),

@@ -3,12 +3,14 @@ import 'package:patient_app/core/storage/secure_storage.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
 
 import '../../auth/presentation/pages/login_page.dart';
+import 'security_settings_page.dart';
 
-/// 마이페이지 탭 뼈대 (내정보 / 생체·자동로그인 / 알림설정)
+/// 마이페이지 탭 (내정보 / 생체·자동로그인 / 알림설정)
 class MyPage extends StatelessWidget {
-  const MyPage({super.key, this.patientName});
+  const MyPage({super.key, this.patientName, this.patientId});
 
   final String? patientName;
+  final String? patientId;
 
   Future<void> _logout(BuildContext context) async {
     await SecureStorageService.logout();
@@ -24,6 +26,8 @@ class MyPage extends StatelessWidget {
     final name = (patientName == null || patientName!.isEmpty)
         ? '환자'
         : patientName!;
+    final idText =
+        (patientId == null || patientId!.isEmpty) ? '-' : patientId!;
 
     return SafeArea(
       child: ListView(
@@ -71,9 +75,9 @@ class MyPage extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      const Text(
-                        '내 정보 조회는 다음 단계에서 연결합니다.',
-                        style: TextStyle(
+                      Text(
+                        '환자 ID: $idText',
+                        style: const TextStyle(
                           fontSize: 13,
                           color: AppColors.textSecondary,
                         ),
@@ -93,7 +97,13 @@ class MyPage extends StatelessWidget {
           _MenuTile(
             icon: Icons.fingerprint_rounded,
             title: '생체인증 / 자동로그인',
-            onTap: () => _soon(context, '생체인증 / 자동로그인'),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const SecuritySettingsPage(),
+                ),
+              );
+            },
           ),
           _MenuTile(
             icon: Icons.notifications_outlined,
