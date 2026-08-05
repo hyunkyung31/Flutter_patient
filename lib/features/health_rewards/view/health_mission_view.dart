@@ -388,7 +388,7 @@ class _HealthMissionViewState extends State<HealthMissionView> {
         builder: (context) {
           return MissionListView(
             controller: controller,
-            currentSteps: stepCounterService.currentSteps,
+            stepCounterService: stepCounterService,
             targetSteps: targetSteps,
             isHospitalVisitConfirmed: isHospitalVisitConfirmed,
             onWaterMissionPressed: _confirmWaterMission,
