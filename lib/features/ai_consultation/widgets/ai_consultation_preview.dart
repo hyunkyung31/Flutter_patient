@@ -1,61 +1,68 @@
 import 'package:flutter/material.dart';
 
-class AiConsultationPreview extends StatefulWidget {
-  const AiConsultationPreview({super.key, this.onQuestionSubmitted});
+import '../../chat/chat_navigation.dart';
+import '../../chat/model/chat_models.dart';
+import '../../chat/service/chat_service.dart';
 
-  final ValueChanged<String>? onQuestionSubmitted;
+class AiConsultationPreview extends StatefulWidget {
+  const AiConsultationPreview({
+    super.key,
+    this.onOpenChatbot,
+  });
+
+  /// null이면 기본 openChatbot 사용
+  final void Function(String? initialMessage, {int? sessionId})? onOpenChatbot;
 
   @override
   State<AiConsultationPreview> createState() => _AiConsultationPreviewState();
 }
 
 class _AiConsultationPreviewState extends State<AiConsultationPreview> {
-  final TextEditingController _questionController = TextEditingController();
+  final ChatService _chatService = ChatService();
 
-  final FocusNode _questionFocusNode = FocusNode();
-
-  final List<String> _popularQuestions = const [
-    '운동하면 숨이 차요',
-    '혈압약은 언제 먹나요?',
-    '검사 결과 쉽게 설명해주세요.',
-  ];
+  List<ChatSessionItem> _sessions = [];
+  bool _loadingHistory = true;
+  String? _historyError;
 
   @override
-  void dispose() {
-    _questionController.dispose();
-    _questionFocusNode.dispose();
-
-    super.dispose();
+  void initState() {
+    super.initState();
+    _loadHistory();
   }
 
-  void _submitQuestion(String question) {
-    final String trimmedQuestion = question.trim();
+  Future<void> _loadHistory() async {
+    setState(() {
+      _loadingHistory = true;
+      _historyError = null;
+    });
+    try {
+      final list = await _chatService.fetchSessions(limit: 5);
+      if (!mounted) return;
+      setState(() {
+        _sessions = list;
+        _loadingHistory = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingHistory = false;
+        _historyError = e.toString().replaceFirst('Exception: ', '');
+        _sessions = [];
+      });
+    }
+  }
 
-    if (trimmedQuestion.isEmpty) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            content: Text('보미에게 궁금한 내용을 입력해 주세요.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-
-      _questionFocusNode.requestFocus();
+  void _open({String? message, int? sessionId}) {
+    final opener = widget.onOpenChatbot;
+    if (opener != null) {
+      opener(message, sessionId: sessionId);
       return;
     }
-
-    _questionFocusNode.unfocus();
-
-    widget.onQuestionSubmitted?.call(trimmedQuestion);
-
-    if (widget.onQuestionSubmitted == null) {
-      debugPrint('AI 상담 질문: $trimmedQuestion');
-    }
-  }
-
-  void _selectPopularQuestion(String question) {
-    _submitQuestion(question);
+    openChatbot(
+      context,
+      initialMessage: message,
+      sessionId: sessionId,
+    ).then((_) => _loadHistory());
   }
 
   @override
@@ -79,18 +86,12 @@ class _AiConsultationPreviewState extends State<AiConsultationPreview> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(),
-
           const SizedBox(height: 14),
-
           _buildQuestionInput(),
-
           const SizedBox(height: 16),
-
-          _buildPopularQuestionHeader(),
-
+          _buildHistoryHeader(),
           const SizedBox(height: 4),
-
-          _buildPopularQuestionList(),
+          _buildHistoryList(),
         ],
       ),
     );
@@ -98,7 +99,6 @@ class _AiConsultationPreviewState extends State<AiConsultationPreview> {
 
   Widget _buildHeader() {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Container(
           width: 42,
@@ -113,9 +113,7 @@ class _AiConsultationPreviewState extends State<AiConsultationPreview> {
             color: Color(0xFF5B9CF6),
           ),
         ),
-
         const SizedBox(width: 11),
-
         const Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -141,19 +139,22 @@ class _AiConsultationPreviewState extends State<AiConsultationPreview> {
             ],
           ),
         ),
-
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-          decoration: BoxDecoration(
-            color: const Color(0xFFEAF4FF),
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: const Text(
-            'AI 상담',
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF3478D4),
+        InkWell(
+          onTap: () => _open(),
+          borderRadius: BorderRadius.circular(999),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEAF4FF),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: const Text(
+              'AI 상담',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF3478D4),
+              ),
             ),
           ),
         ),
@@ -162,64 +163,55 @@ class _AiConsultationPreviewState extends State<AiConsultationPreview> {
   }
 
   Widget _buildQuestionInput() {
-    return Container(
-      height: 48,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F9FC),
+    return Material(
+      color: const Color(0xFFF7F9FC),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFDCE3ED)),
-      ),
-      child: TextField(
-        controller: _questionController,
-        focusNode: _questionFocusNode,
-        textInputAction: TextInputAction.send,
-        onSubmitted: _submitQuestion,
-        maxLines: 1,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-          color: Color(0xFF344054),
-        ),
-        decoration: InputDecoration(
-          hintText: '궁금한 점은 보미에게 물어보세요...',
-          hintStyle: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: Color(0xFF98A2B3),
+        onTap: () => _open(),
+        child: Container(
+          height: 48,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFDCE3ED)),
           ),
-          prefixIcon: const Icon(
-            Icons.search_rounded,
-            size: 18,
-            color: Color(0xFF667085),
-          ),
-          prefixIconConstraints: const BoxConstraints(minWidth: 40),
-          suffixIcon: Padding(
-            padding: const EdgeInsets.all(5),
-            child: IconButton(
-              onPressed: () {
-                _submitQuestion(_questionController.text);
-              },
-              style: IconButton.styleFrom(
-                backgroundColor: const Color(0xFF5B9CF6),
-                foregroundColor: Colors.white,
-                minimumSize: const Size(36, 36),
-                maximumSize: const Size(36, 36),
-                padding: EdgeInsets.zero,
+          padding: const EdgeInsets.only(left: 4, right: 5),
+          child: Row(
+            children: [
+              const SizedBox(width: 8),
+              const Icon(Icons.search_rounded, size: 18, color: Color(0xFF667085)),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  '궁금한 점은 보미에게 물어보세요...',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF98A2B3),
+                  ),
+                ),
               ),
-              icon: const Icon(Icons.arrow_upward_rounded, size: 18),
-            ),
+              IconButton(
+                onPressed: () => _open(),
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFF5B9CF6),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(36, 36),
+                  maximumSize: const Size(36, 36),
+                  padding: EdgeInsets.zero,
+                ),
+                icon: const Icon(Icons.arrow_upward_rounded, size: 18),
+              ),
+            ],
           ),
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(vertical: 14),
         ),
       ),
     );
   }
 
-  Widget _buildPopularQuestionHeader() {
+  Widget _buildHistoryHeader() {
     return Row(
       children: [
         Container(
@@ -230,7 +222,7 @@ class _AiConsultationPreviewState extends State<AiConsultationPreview> {
             shape: BoxShape.circle,
           ),
           child: const Icon(
-            Icons.trending_up_rounded,
+            Icons.history_rounded,
             size: 16,
             color: Color(0xFF5B9CF6),
           ),
@@ -238,7 +230,7 @@ class _AiConsultationPreviewState extends State<AiConsultationPreview> {
         const SizedBox(width: 8),
         const Expanded(
           child: Text(
-            '오늘 많이 물어본 질문',
+            '최근 상담 기록',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w800,
@@ -246,39 +238,85 @@ class _AiConsultationPreviewState extends State<AiConsultationPreview> {
             ),
           ),
         ),
-        const Text(
-          '실시간',
-          style: TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF98A2B3),
+        TextButton(
+          onPressed: _loadingHistory ? null : _loadHistory,
+          style: TextButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(40, 28),
+          ),
+          child: Text(
+            _loadingHistory ? '불러오는 중' : '새로고침',
+            style: const TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF98A2B3),
+            ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildPopularQuestionList() {
-    return Column(
-      children: List.generate(_popularQuestions.length, (index) {
-        final String question = _popularQuestions[index];
+  Widget _buildHistoryList() {
+    if (_loadingHistory) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2.2),
+          ),
+        ),
+      );
+    }
 
-        final bool isLast = index == _popularQuestions.length - 1;
+    if (_historyError != null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(4, 10, 4, 6),
+        child: Text(
+          '상담 기록을 불러오지 못했어요.\n(서버에 history API가 배포됐는지 확인해 주세요)\n$_historyError',
+          style: const TextStyle(
+            fontSize: 12,
+            height: 1.4,
+            color: Color(0xFF98A2B3),
+          ),
+        ),
+      );
+    }
+
+    if (_sessions.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(4, 12, 4, 6),
+        child: Text(
+          '아직 상담 기록이 없어요.\n위에서 질문을 입력해 보미와 대화해 보세요.',
+          style: TextStyle(
+            fontSize: 12.5,
+            height: 1.4,
+            color: Color(0xFF98A2B3),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: List.generate(_sessions.length, (index) {
+        final item = _sessions[index];
+        final isLast = index == _sessions.length - 1;
+        final preview = item.lastMessage.trim().isEmpty
+            ? item.title
+            : item.lastMessage.trim().replaceAll('\n', ' ');
 
         return Column(
           children: [
             Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: () {
-                  _selectPopularQuestion(question);
-                },
+                onTap: () => _open(sessionId: item.id),
                 borderRadius: BorderRadius.circular(12),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 12,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
                   child: Row(
                     children: [
                       SizedBox(
@@ -297,15 +335,31 @@ class _AiConsultationPreviewState extends State<AiConsultationPreview> {
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          question,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF344054),
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF344054),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              preview,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF98A2B3),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(width: 8),
