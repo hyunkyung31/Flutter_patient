@@ -1,0 +1,554 @@
+From a836e678f54fbcde6d01394a65076d68ee0d8c70 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Wed, 5 Aug 2026 01:54:57 +0000
+Subject: [PATCH] feat: add appointments API with primary-doctor aware booking
+
+- Appointment model + migration 0009
+- Patient create/list/update/cancel; doctor confirm
+- Duplicate slot conflict (409)
+- /api/me/ returns primary_doctor for patients
+- /api/doctors/?department= filter
+---
+ api/appointment_views.py           | 261 +++++++++++++++++++++++++++++
+ api/migrations/0009_appointment.py |  44 +++++
+ api/models.py                      |  40 +++++
+ api/serializers.py                 |  57 +++++++
+ api/views.py                       |  47 +++++-
+ config/urls.py                     |   6 +
+ 6 files changed, 452 insertions(+), 3 deletions(-)
+ create mode 100644 api/appointment_views.py
+ create mode 100644 api/migrations/0009_appointment.py
+
+diff --git a/api/appointment_views.py b/api/appointment_views.py
+new file mode 100644
+index 0000000..169222a
+--- /dev/null
++++ b/api/appointment_views.py
+@@ -0,0 +1,261 @@
++"""진료 예약 API (환자 신청 / 의사 조회·확정)."""
++
++from django.utils import timezone
++from rest_framework import status
++from rest_framework.decorators import api_view, permission_classes
++from rest_framework.permissions import IsAuthenticated
++from rest_framework.response import Response
++from drf_spectacular.utils import extend_schema
++
++from api.models import Appointment, Doctor, Patient
++from api.serializers import (
++    AppointmentCreateSerializer,
++    AppointmentSerializer,
++    AppointmentUpdateSerializer,
++)
++
++
++def _as_patient(user):
++    return Patient.objects.filter(patient_id=user.username).first()
++
++
++def _as_doctor(user):
++    return Doctor.objects.filter(doctor_id=user.username).first()
++
++
++def _active_conflict(doctor_id: str, scheduled_at, exclude_id=None):
++    """같은 의사·같은 시각에 requested/confirmed 예약이 있는지."""
++    qs = Appointment.objects.filter(
++        doctor_id=doctor_id,
++        scheduled_at=scheduled_at,
++        status__in=[Appointment.STATUS_REQUESTED, Appointment.STATUS_CONFIRMED],
++    )
++    if exclude_id is not None:
++        qs = qs.exclude(id=exclude_id)
++    return qs.exists()
++
++
++@extend_schema(tags=["appointments"])
++@api_view(["GET", "POST"])
++@permission_classes([IsAuthenticated])
++def appointment_list_create(request):
++    """
++    GET  - 환자: 내 예약 / 의사: 내 예약 목록
++    POST - 환자: 예약 신청 (status=requested)
++    """
++    if request.method == "GET":
++        return _list_appointments(request)
++    return _create_appointment(request)
++
++
++def _list_appointments(request):
++    patient = _as_patient(request.user)
++    doctor = _as_doctor(request.user)
++
++    qs = Appointment.objects.all()
++    if patient is not None:
++        qs = qs.filter(patient_id=patient.patient_id)
++    elif doctor is not None:
++        qs = qs.filter(doctor_id=doctor.doctor_id)
++    else:
++        return Response(
++            {"detail": "환자 또는 의사 계정으로만 조회할 수 있습니다."},
++            status=status.HTTP_403_FORBIDDEN,
++        )
++
++    status_q = (request.query_params.get("status") or "").strip()
++    if status_q:
++        qs = qs.filter(status=status_q)
++
++    date_q = (request.query_params.get("date") or "").strip()  # YYYY-MM-DD
++    if date_q:
++        qs = qs.filter(scheduled_at__date=date_q)
++
++    # 취소 제외 기본값 (include_cancelled=1 이면 포함)
++    include_cancelled = request.query_params.get("include_cancelled") == "1"
++    if not include_cancelled:
++        qs = qs.exclude(status=Appointment.STATUS_CANCELLED)
++
++    qs = qs.order_by("scheduled_at", "id")
++    return Response(AppointmentSerializer(qs, many=True).data)
++
++
++def _create_appointment(request):
++    patient = _as_patient(request.user)
++    if patient is None:
++        return Response(
++            {"detail": "환자 계정으로만 예약을 신청할 수 있습니다."},
++            status=status.HTTP_403_FORBIDDEN,
++        )
++
++    ser = AppointmentCreateSerializer(data=request.data)
++    ser.is_valid(raise_exception=True)
++    data = ser.validated_data
++
++    doctor_id = data["doctor_id"].strip()
++    doctor = Doctor.objects.filter(doctor_id=doctor_id).first()
++    if doctor is None:
++        return Response(
++            {"detail": "선택한 의사를 찾을 수 없습니다."},
++            status=status.HTTP_400_BAD_REQUEST,
++        )
++
++    department = (data.get("department") or doctor.department or "").strip()
++    scheduled_at = data["scheduled_at"]
++    if timezone.is_naive(scheduled_at):
++        scheduled_at = timezone.make_aware(
++            scheduled_at, timezone.get_current_timezone()
++        )
++
++    if scheduled_at <= timezone.now():
++        return Response(
++            {"detail": "과거 일시로는 예약할 수 없습니다."},
++            status=status.HTTP_400_BAD_REQUEST,
++        )
++
++    if _active_conflict(doctor_id, scheduled_at):
++        return Response(
++            {"detail": "해당 시간대에 이미 예약이 있습니다. 다른 시간을 선택해주세요."},
++            status=status.HTTP_409_CONFLICT,
++        )
++
++    appt = Appointment.objects.create(
++        patient_id=patient.patient_id,
++        doctor_id=doctor.doctor_id,
++        department=department,
++        scheduled_at=scheduled_at,
++        status=Appointment.STATUS_REQUESTED,
++        memo=(data.get("memo") or "").strip(),
++    )
++    return Response(
++        AppointmentSerializer(appt).data,
++        status=status.HTTP_201_CREATED,
++    )
++
++
++@extend_schema(tags=["appointments"])
++@api_view(["GET", "PATCH"])
++@permission_classes([IsAuthenticated])
++def appointment_detail(request, appointment_id: int):
++    appt = Appointment.objects.filter(id=appointment_id).first()
++    if appt is None:
++        return Response(
++            {"detail": "예약을 찾을 수 없습니다."},
++            status=status.HTTP_404_NOT_FOUND,
++        )
++
++    patient = _as_patient(request.user)
++    doctor = _as_doctor(request.user)
++
++    if patient is not None and appt.patient_id != patient.patient_id:
++        return Response({"detail": "권한이 없습니다."}, status=status.HTTP_403_FORBIDDEN)
++    if doctor is not None and appt.doctor_id != doctor.doctor_id:
++        return Response({"detail": "권한이 없습니다."}, status=status.HTTP_403_FORBIDDEN)
++    if patient is None and doctor is None:
++        return Response({"detail": "권한이 없습니다."}, status=status.HTTP_403_FORBIDDEN)
++
++    if request.method == "GET":
++        return Response(AppointmentSerializer(appt).data)
++
++    return _update_appointment(request, appt, patient=patient, doctor=doctor)
++
++
++def _update_appointment(request, appt: Appointment, *, patient, doctor):
++    ser = AppointmentUpdateSerializer(data=request.data, partial=True)
++    ser.is_valid(raise_exception=True)
++    data = ser.validated_data
++
++    # 환자: 변경(일시/의사/메모) 또는 취소만
++    if patient is not None:
++        new_status = data.get("status")
++        if new_status and new_status != Appointment.STATUS_CANCELLED:
++            return Response(
++                {"detail": "환자는 취소만 요청할 수 있습니다. 확정은 의료진이 처리합니다."},
++                status=status.HTTP_403_FORBIDDEN,
++            )
++
++        if new_status == Appointment.STATUS_CANCELLED:
++            if appt.status in (
++                Appointment.STATUS_CANCELLED,
++                Appointment.STATUS_COMPLETED,
++            ):
++                return Response(
++                    {"detail": "이미 종료된 예약입니다."},
++                    status=status.HTTP_400_BAD_REQUEST,
++                )
++            appt.status = Appointment.STATUS_CANCELLED
++            appt.save(update_fields=["status", "updated_at"])
++            return Response(AppointmentSerializer(appt).data)
++
++        if appt.status not in (
++            Appointment.STATUS_REQUESTED,
++            Appointment.STATUS_CONFIRMED,
++        ):
++            return Response(
++                {"detail": "변경할 수 없는 예약 상태입니다."},
++                status=status.HTTP_400_BAD_REQUEST,
++            )
++
++        doctor_id = data.get("doctor_id", appt.doctor_id)
++        if "doctor_id" in data:
++            doc = Doctor.objects.filter(doctor_id=doctor_id).first()
++            if doc is None:
++                return Response(
++                    {"detail": "선택한 의사를 찾을 수 없습니다."},
++                    status=status.HTTP_400_BAD_REQUEST,
++                )
++            appt.doctor_id = doc.doctor_id
++            if not data.get("department"):
++                appt.department = doc.department
++
++        if "department" in data and data["department"]:
++            appt.department = data["department"].strip()
++
++        if "scheduled_at" in data:
++            scheduled_at = data["scheduled_at"]
++            if timezone.is_naive(scheduled_at):
++                scheduled_at = timezone.make_aware(
++                    scheduled_at, timezone.get_current_timezone()
++                )
++            if scheduled_at <= timezone.now():
++                return Response(
++                    {"detail": "과거 일시로는 예약할 수 없습니다."},
++                    status=status.HTTP_400_BAD_REQUEST,
++                )
++            if _active_conflict(appt.doctor_id, scheduled_at, exclude_id=appt.id):
++                return Response(
++                    {"detail": "해당 시간대에 이미 예약이 있습니다. 다른 시간을 선택해주세요."},
++                    status=status.HTTP_409_CONFLICT,
++                )
++            appt.scheduled_at = scheduled_at
++            # 변경 시 다시 의료진 확정 필요
++            appt.status = Appointment.STATUS_REQUESTED
++
++        if "memo" in data:
++            appt.memo = (data.get("memo") or "").strip()
++
++        appt.save()
++        return Response(AppointmentSerializer(appt).data)
++
++    # 의사: 확정/완료/취소
++    if doctor is not None:
++        new_status = data.get("status")
++        if not new_status:
++            return Response(
++                {"detail": "status 필드가 필요합니다. (confirmed/cancelled/completed)"},
++                status=status.HTTP_400_BAD_REQUEST,
++            )
++        if new_status not in (
++            Appointment.STATUS_CONFIRMED,
++            Appointment.STATUS_CANCELLED,
++            Appointment.STATUS_COMPLETED,
++        ):
++            return Response(
++                {"detail": "의료진이 설정할 수 없는 상태입니다."},
++                status=status.HTTP_400_BAD_REQUEST,
++            )
++        appt.status = new_status
++        appt.save(update_fields=["status", "updated_at"])
++        return Response(AppointmentSerializer(appt).data)
++
++    return Response({"detail": "권한이 없습니다."}, status=status.HTTP_403_FORBIDDEN)
+diff --git a/api/migrations/0009_appointment.py b/api/migrations/0009_appointment.py
+new file mode 100644
+index 0000000..5b355ae
+--- /dev/null
++++ b/api/migrations/0009_appointment.py
+@@ -0,0 +1,44 @@
++# Generated manually for appointments
++
++from django.db import migrations, models
++
++
++class Migration(migrations.Migration):
++
++    dependencies = [
++        ("api", "0008_chat_memo_consultation_fields"),
++    ]
++
++    operations = [
++        migrations.CreateModel(
++            name="Appointment",
++            fields=[
++                ("id", models.BigAutoField(primary_key=True, serialize=False)),
++                ("patient_id", models.CharField(db_index=True, max_length=50)),
++                ("doctor_id", models.CharField(db_index=True, max_length=20)),
++                ("department", models.CharField(max_length=50)),
++                ("scheduled_at", models.DateTimeField(db_index=True)),
++                (
++                    "status",
++                    models.CharField(
++                        choices=[
++                            ("requested", "신청됨"),
++                            ("confirmed", "확정"),
++                            ("cancelled", "취소"),
++                            ("completed", "완료"),
++                        ],
++                        db_index=True,
++                        default="requested",
++                        max_length=20,
++                    ),
++                ),
++                ("memo", models.TextField(blank=True, default="")),
++                ("created_at", models.DateTimeField(auto_now_add=True)),
++                ("updated_at", models.DateTimeField(auto_now=True)),
++            ],
++            options={
++                "db_table": "appointments",
++                "ordering": ["scheduled_at", "id"],
++            },
++        ),
++    ]
+diff --git a/api/models.py b/api/models.py
+index 23602a6..975e65c 100644
+--- a/api/models.py
++++ b/api/models.py
+@@ -373,6 +373,46 @@ class EMRSignOff(models.Model):
+     def __str__(self):
+         return f"EMRSignOff({self.id}, {self.patient_id}, {self.doctor_id})"
+ 
++class Appointment(models.Model):
++    """환자 진료 예약. 의사/환자는 unmanaged라 FK 대신 id 문자열 사용."""
++
++    STATUS_REQUESTED = "requested"
++    STATUS_CONFIRMED = "confirmed"
++    STATUS_CANCELLED = "cancelled"
++    STATUS_COMPLETED = "completed"
++    STATUS_CHOICES = [
++        (STATUS_REQUESTED, "신청됨"),
++        (STATUS_CONFIRMED, "확정"),
++        (STATUS_CANCELLED, "취소"),
++        (STATUS_COMPLETED, "완료"),
++    ]
++
++    id = models.BigAutoField(primary_key=True)
++    patient_id = models.CharField(max_length=50, db_index=True)
++    doctor_id = models.CharField(max_length=20, db_index=True)
++    department = models.CharField(max_length=50)
++    scheduled_at = models.DateTimeField(db_index=True)
++    status = models.CharField(
++        max_length=20,
++        choices=STATUS_CHOICES,
++        default=STATUS_REQUESTED,
++        db_index=True,
++    )
++    memo = models.TextField(blank=True, default="")
++    created_at = models.DateTimeField(auto_now_add=True)
++    updated_at = models.DateTimeField(auto_now=True)
++
++    class Meta:
++        db_table = "appointments"
++        ordering = ["scheduled_at", "id"]
++
++    def __str__(self):
++        return (
++            f"Appointment({self.id}, {self.patient_id} → {self.doctor_id}, "
++            f"{self.scheduled_at}, {self.status})"
++        )
++
++
+ class PatientAuth(models.Model):
+     auth_id = models.BigAutoField(primary_key=True)
+ 
+diff --git a/api/serializers.py b/api/serializers.py
+index 49ecc82..49e414d 100644
+--- a/api/serializers.py
++++ b/api/serializers.py
+@@ -2,6 +2,7 @@ from rest_framework import serializers
+ from api.models import Doctor, Patient, Examination, AIResult, Bookmark, Consultation, Notification, EMRSignOff
+ from api.models import ChatRoom, ChatMessage
+ from api.models import Memo
++from api.models import Appointment
+ 
+ import os
+ from django.conf import settings
+@@ -900,3 +901,59 @@ class MemoCreateUpdateSerializer(serializers.ModelSerializer):
+             })
+ 
+         return attrs
++
++
++class AppointmentSerializer(serializers.ModelSerializer):
++    doctor_name = serializers.SerializerMethodField()
++    patient_name = serializers.SerializerMethodField()
++
++    class Meta:
++        model = Appointment
++        fields = [
++            "id",
++            "patient_id",
++            "patient_name",
++            "doctor_id",
++            "doctor_name",
++            "department",
++            "scheduled_at",
++            "status",
++            "memo",
++            "created_at",
++            "updated_at",
++        ]
++        read_only_fields = [
++            "id",
++            "patient_id",
++            "patient_name",
++            "doctor_name",
++            "status",
++            "created_at",
++            "updated_at",
++        ]
++
++    def get_doctor_name(self, obj):
++        doc = Doctor.objects.filter(doctor_id=obj.doctor_id).first()
++        return doc.doctor_name if doc else None
++
++    def get_patient_name(self, obj):
++        patient = Patient.objects.filter(patient_id=obj.patient_id).first()
++        return patient.patient_name if patient else None
++
++
++class AppointmentCreateSerializer(serializers.Serializer):
++    doctor_id = serializers.CharField(max_length=20)
++    department = serializers.CharField(max_length=50, required=False, allow_blank=True)
++    scheduled_at = serializers.DateTimeField()
++    memo = serializers.CharField(required=False, allow_blank=True, default="")
++
++
++class AppointmentUpdateSerializer(serializers.Serializer):
++    doctor_id = serializers.CharField(max_length=20, required=False)
++    department = serializers.CharField(max_length=50, required=False, allow_blank=True)
++    scheduled_at = serializers.DateTimeField(required=False)
++    memo = serializers.CharField(required=False, allow_blank=True)
++    status = serializers.ChoiceField(
++        choices=[c[0] for c in Appointment.STATUS_CHOICES],
++        required=False,
++    )
+diff --git a/api/views.py b/api/views.py
+index 7f4ff97..3eae81f 100644
+--- a/api/views.py
++++ b/api/views.py
+@@ -302,10 +302,47 @@ def kakao_signup(request):
+ @api_view(["GET"])
+ @permission_classes([IsAuthenticated])
+ def me(request):
++    """로그인한 환자/의사 프로필. 환자는 primary_doctor 포함."""
+     user = request.user
++    username = user.username
++
++    patient = Patient.objects.filter(patient_id=username).first()
++    if patient is not None:
++        primary_doctor = None
++        if patient.primary_doctor_id:
++            doc = Doctor.objects.filter(
++                doctor_id=patient.primary_doctor_id
++            ).first()
++            if doc is not None:
++                primary_doctor = DoctorSerializer(doc).data
++        return Response({
++            "role": "patient",
++            "id": user.id,
++            "username": username,
++            "email": user.email,
++            "patient_id": patient.patient_id,
++            "patient_name": patient.patient_name,
++            "primary_doctor_id": patient.primary_doctor_id,
++            "primary_doctor": primary_doctor,
++        })
++
++    doctor = Doctor.objects.filter(doctor_id=username).first()
++    if doctor is not None:
++        return Response({
++            "role": "doctor",
++            "id": user.id,
++            "username": username,
++            "email": user.email,
++            "doctor_id": doctor.doctor_id,
++            "doctor_name": doctor.doctor_name,
++            "department": doctor.department,
++            "hospital_name": doctor.hospital_name,
++        })
++
+     return Response({
++        "role": "unknown",
+         "id": user.id,
+-        "username": user.username,
++        "username": username,
+         "email": user.email,
+     })
+ 
+@@ -316,8 +353,12 @@ def me(request):
+ @api_view(["GET"])
+ @permission_classes([IsAuthenticated])
+ def doctor_list(request):
+-    doctors = Doctor.objects.all().order_by("doctor_id")
+-    return Response(DoctorSerializer(doctors, many=True).data)
++    """의사 목록. ?department=순환기내과 로 필터 가능."""
++    qs = Doctor.objects.all().order_by("doctor_id")
++    department = (request.query_params.get("department") or "").strip()
++    if department:
++        qs = qs.filter(department=department)
++    return Response(DoctorSerializer(qs, many=True).data)
+ 
+ 
+ @extend_schema(
+diff --git a/config/urls.py b/config/urls.py
+index 1287205..588f816 100644
+--- a/config/urls.py
++++ b/config/urls.py
+@@ -37,6 +37,10 @@ from api.views import (
+     kakao_signup,
+     exam_ai_run_and_persist,
+ )
++from api.appointment_views import (
++    appointment_list_create,
++    appointment_detail,
++)
+ from rest_framework_simplejwt.views import(
+     TokenObtainPairView,
+     TokenRefreshView,
+@@ -91,4 +95,6 @@ urlpatterns = [
+     path("api/ai/image-analyze/", ai_image_analyze),
+     path("api/media/gcs/", media_gcs),
+     path("api/exams/<int:exam_id>/ai/run/", exam_ai_run_and_persist),
++    path("api/appointments/", appointment_list_create),
++    path("api/appointments/<int:appointment_id>/", appointment_detail),
+ ]
+-- 
+2.43.0
+
