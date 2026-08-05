@@ -55,6 +55,17 @@ Release 빌드를 쓰면 **release keystore** 해시도 따로 등록해야 합�
 - 생체인증은 기본 OFF → 로그인 직후 팝업 또는 마이페이지 → 생체인증/자동로그인 에서 ON
 - 로그아웃 시 토큰만 삭제, 자동로그인/생체 **설정값은 유지**
 
+## 실제 환자 / 테스터 온보딩
+자세한 체크리스트·SQL 템플릿:
+
+- `docs/tester_onboarding.md`
+- `docs/sql/insert_tester_patients.sql`
+
+요약:
+1. **Key Hash** — 테스터용은 APK 1개 빌드 후 그 해시만 콘솔 등록 (추천)
+2. **DB** — `patients`에 이름+전화(010…) row INSERT
+3. 앱에서 카카오 로그인 → 회원가입(이름/전화 일치) → 이후 로그인만
+
 ## Backend
 Flutter exchanges the Kakao access token with:
 
