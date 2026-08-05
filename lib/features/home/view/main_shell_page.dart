@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
 
+import '../../chat/chat_navigation.dart';
 import '../../health_rewards/view/health_mission_view.dart';
 import '../../mypage/view/my_page.dart';
 import '../../reservation/view/reservation_page.dart';
@@ -38,9 +39,7 @@ class _MainShellPageState extends State<MainShellPage> {
   }
 
   void _openChatbot() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('AI 심혈관 도우미는 곧 연결됩니다.')),
-    );
+    openChatbot(context);
   }
 
   @override

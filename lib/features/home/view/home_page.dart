@@ -60,13 +60,7 @@ class HomePage extends StatelessWidget {
                 // 걸음수 카드 (보미 크게 오버랩) → 건강정원
                 _StepsCard(onTap: () => onOpenTab?.call(3)),
                 const SizedBox(height: 12),
-                AiConsultationPreview(
-                  onQuestionSubmitted: (question) {
-                    debugPrint('선택한 AI 상담 질문: $question');
-
-                    // TODO: 팀장님이 AI 답변 화면 이동 또는 AI 처리 코드 연결
-                  },
-                ),
+                const AiConsultationPreview(),
               ],
             ),
           ),
