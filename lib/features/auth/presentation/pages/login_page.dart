@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:patient_app/core/storage/secure_storage.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
+import 'package:patient_app/features/auth/data/local/biometric_service.dart';
 
 import '../../../home/view/main_shell_page.dart';
 import '../../data/datasource/kakao_auth_service.dart';
@@ -78,6 +79,10 @@ class _LoginPageState extends State<LoginPage> {
         'accessLen=${result.access.length}',
       );
 
+      // 지문 미사용이면 한 번 제안 (거부해도 자동로그인은 유지)
+      await _maybeOfferBiometric();
+      if (!mounted) return;
+
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
           builder: (_) => MainShellPage(
@@ -113,6 +118,59 @@ class _LoginPageState extends State<LoginPage> {
       return '로그인에 실패했습니다. 다시 시도해주세요.';
     }
     return raw;
+  }
+
+  /// 로그인 직후 생체인증 켜기 제안
+  Future<void> _maybeOfferBiometric() async {
+    final alreadyOn = await SecureStorageService.isBiometricEnabled();
+    if (alreadyOn || !mounted) return;
+
+    final biometric = BiometricService();
+    final can = await biometric.canCheckBiometrics();
+    if (!can || !mounted) return;
+
+    final enable = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('지문/생체 인증'),
+        content: const Text(
+          '자동로그인이 켜졌습니다.\n'
+          '다음부터 앱 실행 시 지문(또는 Face)으로 잠금을 해제할까요?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('나중에'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('켜기'),
+          ),
+        ],
+      ),
+    );
+
+    if (enable != true || !mounted) return;
+
+    final ok = await biometric.authenticate(
+      reason: '생체인증을 사용하려면 한 번 인증해주세요.',
+    );
+    if (!ok) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('생체인증에 실패했습니다. 마이페이지에서 다시 켤 수 있어요.'),
+        ),
+      );
+      return;
+    }
+
+    await SecureStorageService.setAutoLoginEnabled(true);
+    await SecureStorageService.setBiometricEnabled(true);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('생체인증이 켜졌습니다.')),
+    );
   }
 
   @override

@@ -144,11 +144,17 @@ class _SecuritySettingsPageState extends State<SecuritySettingsPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  '참고\n'
-                  '· 로그아웃하면 토큰이 삭제되어 자동로그인이 동작하지 않습니다.\n'
-                  '· 생체인증을 켜면 자동로그인도 함께 켜집니다.',
-                  style: TextStyle(
+                Text(
+                  _deviceSupportsBio
+                      ? '참고\n'
+                          '· 카카오 로그인 성공 시 자동로그인이 기본으로 켜집니다.\n'
+                          '· 생체인증을 켜면 앱 재실행 시 지문/Face 확인 후 홈으로 갑니다.\n'
+                          '· 로그아웃해도 자동로그인·생체 설정은 유지되고, 토큰만 삭제됩니다.\n'
+                          '· 기기 설정에 지문/화면잠금이 등록되어 있어야 합니다.'
+                      : '참고\n'
+                          '· 이 기기는 생체인증을 지원하지 않거나, 지문/화면잠금이 없습니다.\n'
+                          '· 설정 → 보안에서 지문 또는 PIN을 등록한 뒤 다시 열어주세요.',
+                  style: const TextStyle(
                     fontSize: 12.5,
                     height: 1.5,
                     color: AppColors.textSecondary,

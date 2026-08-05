@@ -1,10 +1,18 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../constants/storage_keys.dart';
 
 class SecureStorageService {
-  // flutter_secure_storage 10+ defaults to AES-GCM custom ciphers on Android.
-  static const FlutterSecureStorage _storage = FlutterSecureStorage();
+  // Android: EncryptedSharedPreferences 로 기기 재시작 후에도 세션 유지
+  static const FlutterSecureStorage _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(
+      encryptedSharedPreferences: true,
+    ),
+    iOptions: IOSOptions(
+      accessibility: KeychainAccessibility.first_unlock,
+    ),
+  );
 
   // ── tokens ──────────────────────────────────────────────
   static Future<void> saveToken({
@@ -16,7 +24,8 @@ class SecureStorageService {
         _storage.write(key: StorageKeys.accessToken, value: access),
         _storage.write(key: StorageKeys.refreshToken, value: refresh),
       ]);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('SecureStorage saveToken failed: $e');
       // Prevent half-written token pairs.
       await _storage.delete(key: StorageKeys.accessToken);
       await _storage.delete(key: StorageKeys.refreshToken);
@@ -83,7 +92,7 @@ class SecureStorageService {
     return v == 'true';
   }
 
-  /// 로그인 성공 후 한 번에 저장
+  /// 로그인 성공 후 한 번에 저장 (자동로그인 기본 ON)
   static Future<void> saveSession({
     required String access,
     required String refresh,
@@ -94,12 +103,35 @@ class SecureStorageService {
     await saveToken(access: access, refresh: refresh);
     await savePatientProfile(patientId: patientId, patientName: patientName);
     await setAutoLoginEnabled(enableAutoLogin);
+
+    // 저장 검증 (일부 기기에서 write 실패가 조용히 나는 경우 대비)
+    final ok = await hasTokens();
+    final auto = await isAutoLoginEnabled();
+    debugPrint(
+      'SecureStorage saveSession ok=$ok autoLogin=$auto '
+      'patientId=$patientId',
+    );
+    if (!ok) {
+      throw Exception('로그인 정보 저장에 실패했습니다. 다시 시도해주세요.');
+    }
   }
 
+  /// 로그아웃: 토큰/프로필만 삭제. 자동로그인·생체 설정은 기기 선호로 유지.
   static Future<void> logout() async {
-    // 생체/자동로그인 설정은 기기 선호로 남겨둘 수도 있지만,
-    // 로그아웃 시에는 토큰·프로필만 지우고 플래그는 유지해도 됨.
-    // 여기서는 안전하게 전부 삭제.
-    await _storage.deleteAll();
+    await Future.wait([
+      _storage.delete(key: StorageKeys.accessToken),
+      _storage.delete(key: StorageKeys.refreshToken),
+      _storage.delete(key: StorageKeys.patientId),
+      _storage.delete(key: StorageKeys.patientName),
+    ]);
+  }
+
+  /// 개발/디버그용: 세션 상태 요약
+  static Future<String> debugSessionSummary() async {
+    final has = await hasTokens();
+    final auto = await isAutoLoginEnabled();
+    final bio = await isBiometricEnabled();
+    final id = await getPatientId();
+    return 'hasTokens=$has autoLogin=$auto biometric=$bio patientId=$id';
   }
 }

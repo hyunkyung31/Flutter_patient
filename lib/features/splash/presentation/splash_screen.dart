@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -87,9 +88,11 @@ class _SplashScreenState extends State<SplashScreen>
 
   Future<void> _goNext() async {
     if (!mounted || _navigated) return;
-    _navigated = true;
 
     try {
+      final summary = await SecureStorageService.debugSessionSummary();
+      debugPrint('Splash session: $summary');
+
       final hasTokens = await SecureStorageService.hasTokens();
       final autoLogin = await SecureStorageService.isAutoLoginEnabled();
 
@@ -102,15 +105,21 @@ class _SplashScreenState extends State<SplashScreen>
               reason: '자동로그인을 위해 생체인증을 진행합니다.',
             );
             if (!ok) {
+              debugPrint('Splash: biometric failed → login');
               _openLogin();
               return;
             }
+          } else {
+            debugPrint(
+              'Splash: biometric enabled but device cannot check → skip bio',
+            );
           }
         }
 
         final name = await SecureStorageService.getPatientName();
         final patientId = await SecureStorageService.getPatientId();
-        if (!mounted) return;
+        if (!mounted || _navigated) return;
+        _navigated = true;
         Navigator.of(context).pushReplacement(
           _fadeRoute(
             MainShellPage(
@@ -121,15 +130,20 @@ class _SplashScreenState extends State<SplashScreen>
         );
         return;
       }
-    } catch (_) {
-      // fallthrough → login
+
+      debugPrint(
+        'Splash: skip auto-login (hasTokens=$hasTokens autoLogin=$autoLogin)',
+      );
+    } catch (e) {
+      debugPrint('Splash auto-login error: $e');
     }
 
     _openLogin();
   }
 
   void _openLogin() {
-    if (!mounted) return;
+    if (!mounted || _navigated) return;
+    _navigated = true;
     Navigator.of(context).pushReplacement(
       _fadeRoute(const LoginPage()),
     );

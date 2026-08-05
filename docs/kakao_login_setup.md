@@ -24,10 +24,36 @@ SDK v2 redirect activity:
 Register:
 
 - Android package name: `com.vena.patient_app`
-- Debug/release key hash
+- **모든 PC / 빌드 유형의 Key Hash** (아래 참고)
 
-Register the Android debug/release key hash in Kakao Developers Console.
-(If needed, generate the debug key hash with `keytool` as in the Kakao docs.)
+### `android keyhash validation failed` / `misconfigured`
+PC마다 `~/.android/debug.keystore` 가 달라서 **디버그 Key Hash가 다릅니다.**  
+한 PC에서만 되면, 다른 PC·다른 폰(다른 서명)의 해시를 콘솔에 **추가로** 등록해야 합니다.
+
+앱 실행 후 Logcat에서 `KakaoKeyHash` 로 필터하면 해시가 출력됩니다.
+
+#### Windows (PowerShell) — debug key hash
+OpenSSL이 있으면:
+
+```bat
+keytool -exportcert -alias androiddebugkey -keystore %USERPROFILE%\.android\debug.keystore -storepass android -keypass android | openssl sha1 -binary | openssl base64
+```
+
+OpenSSL 없이 (Git Bash / WSL에서도 동일 가능):
+
+```bat
+keytool -exportcert -alias androiddebugkey -keystore %USERPROFILE%\.android\debug.keystore -storepass android -keypass android -rfc > %TEMP%\vena_cert.pem
+```
+
+그 다음 [카카오 키 해시 등록](https://developers.kakao.com/console/app) → 내 애플리케이션 → 앱 설정 → 플랫폼 → Android → **키 해시**에 추가.
+
+Release 빌드를 쓰면 **release keystore** 해시도 따로 등록해야 합니다.
+
+## Auto-login / Biometric
+- 카카오 로그인 성공 시 토큰 + `auto_login_enabled=true` 저장
+- 스플래시에서 토큰+자동로그인 있으면 홈으로 이동
+- 생체인증은 기본 OFF → 로그인 직후 팝업 또는 마이페이지 → 생체인증/자동로그인 에서 ON
+- 로그아웃 시 토큰만 삭제, 자동로그인/생체 **설정값은 유지**
 
 ## Backend
 Flutter exchanges the Kakao access token with:
