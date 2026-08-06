@@ -89,22 +89,34 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted || _navigated) return;
 
     try {
-      final summary = await SecureStorageService.debugSessionSummary();
-      debugPrint('Splash session: $summary');
+      // 개발 중에는 앱을 다시 실행할 때마다 온보딩 표시
+      if (kDebugMode) {
+        await OnboardingStorage.reset();
+      }
 
-      // 온보딩 미완료면 온보딩 먼저
-      final onboardingCompleted = await OnboardingStorage.isCompleted();
-      if (!mounted) return;
+      final bool onboardingCompleted = await OnboardingStorage.isCompleted();
+
+      debugPrint('Splash onboarding completed: $onboardingCompleted');
+
+      if (!mounted || _navigated) return;
+
       if (!onboardingCompleted) {
         _navigated = true;
-        Navigator.of(context).pushReplacement(
-          _fadeRoute(const BomiOnboardingScreen()),
-        );
+
+        Navigator.of(
+          context,
+        ).pushReplacement(_fadeRoute(const BomiOnboardingScreen()));
         return;
       }
 
-      final hasTokens = await SecureStorageService.hasTokens();
-      final autoLogin = await SecureStorageService.isAutoLoginEnabled();
+      // 온보딩 완료 후 로그인 세션 확인
+      final summary = await SecureStorageService.debugSessionSummary();
+
+      debugPrint('Splash session: $summary');
+
+      final bool hasTokens = await SecureStorageService.hasTokens();
+
+      final bool autoLogin = await SecureStorageService.isAutoLoginEnabled();
 
       if (hasTokens && autoLogin) {
         final bool biometricOn =
@@ -123,29 +135,29 @@ class _SplashScreenState extends State<SplashScreen>
               _openLogin();
               return;
             }
-          } else {
-            debugPrint(
-              'Splash: biometric enabled but device cannot check → skip bio',
-            );
           }
         }
 
-        final name = await SecureStorageService.getPatientName();
-        final patientId = await SecureStorageService.getPatientId();
+        final String? name = await SecureStorageService.getPatientName();
+
+        final String? patientId = await SecureStorageService.getPatientId();
+
         if (!mounted || _navigated) return;
+
         _navigated = true;
+
         Navigator.of(context).pushReplacement(
           _fadeRoute(MainShellPage(patientName: name, patientId: patientId)),
         );
-
         return;
       }
 
       debugPrint(
-        'Splash: skip auto-login (hasTokens=$hasTokens autoLogin=$autoLogin)',
+        'Splash: skip auto-login '
+        '(hasTokens=$hasTokens autoLogin=$autoLogin)',
       );
-    } catch (e, stackTrace) {
-      debugPrint('Splash auto-login error: $e');
+    } catch (error, stackTrace) {
+      debugPrint('Splash onboarding/auto-login error: $error');
       debugPrintStack(stackTrace: stackTrace);
     }
 
@@ -155,9 +167,7 @@ class _SplashScreenState extends State<SplashScreen>
   void _openLogin() {
     if (!mounted || _navigated) return;
     _navigated = true;
-    Navigator.of(context).pushReplacement(
-      _fadeRoute(const LoginPage()),
-    );
+    Navigator.of(context).pushReplacement(_fadeRoute(const LoginPage()));
   }
 
   PageRouteBuilder _fadeRoute(Widget page) {
