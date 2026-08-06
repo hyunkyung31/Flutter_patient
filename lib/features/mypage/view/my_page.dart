@@ -3,6 +3,7 @@ import 'package:patient_app/core/storage/secure_storage.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
 
 import '../../auth/presentation/pages/login_page.dart';
+import '../../clinical_report/view/clinical_report_list_page.dart';
 import 'my_info_page.dart';
 import 'security_settings_page.dart';
 
@@ -108,6 +109,17 @@ class MyPage extends StatelessWidget {
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const SecuritySettingsPage(),
+                ),
+              );
+            },
+          ),
+          _MenuTile(
+            icon: Icons.description_outlined,
+            title: '임상 보고서',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const ClinicalReportListPage(),
                 ),
               );
             },

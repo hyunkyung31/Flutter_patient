@@ -19,6 +19,14 @@ class ApiEndpoints {
   static const String appointmentsMe = '/api/appointments/me/';
   static String appointmentDetail(String id) => '/api/appointments/$id/';
 
+  /// 환자용 임상 보고서 (의사 SIGN OFF 전달분)
+  static const String clinicalReportsMe = '/api/emr-signoffs/me/';
+  static const String clinicalReports = '/api/emr-signoffs/';
+  static String clinicalReportDetail(int signOffId) =>
+      '/api/emr-signoffs/$signOffId/';
+  static String clinicalReportPdf(int signOffId) =>
+      '/api/emr-signoffs/$signOffId/report/';
+
   /// 환자 AI 챗봇 (Django: path("chat/", ...))
   static const String chat = '/chat/';
 

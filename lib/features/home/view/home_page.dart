@@ -6,6 +6,7 @@ import 'package:patient_app/core/theme/app_colors.dart';
 import '../../health_rewards/services/step_counter_service.dart';
 import '../../reservation/model/reservation.dart';
 import '../../reservation/repository/reservation_remote_repository.dart';
+import '../../clinical_report/view/clinical_report_list_page.dart';
 import 'package:patient_app/features/ai_consultation/widgets/ai_consultation_preview.dart';
 
 // 시간대별 이미지 선택 함수
@@ -58,6 +59,8 @@ class HomePage extends StatelessWidget {
                     onExamHistory: () => onOpenTab?.call(2),
                   ),
                 ),
+                const SizedBox(height: 12),
+                const _ClinicalReportEntryCard(),
                 const SizedBox(height: 12),
                 // 걸음수 카드 (보미 크게 오버랩) → 건강정원
                 _StepsCard(onTap: () => onOpenTab?.call(3)),
@@ -671,86 +674,75 @@ class _StepsCardState extends State<_StepsCard> {
   }
 }
 
-class _AiNoticeBanner extends StatelessWidget {
-  const _AiNoticeBanner();
+class _ClinicalReportEntryCard extends StatelessWidget {
+  const _ClinicalReportEntryCard();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFDF2F8), Color(0xFFFFF1F2)],
-        ),
+    return Material(
+      color: AppColors.white,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFFBCFE8)),
-      ),
-      child: Row(
-        children: [
-          // 챗봇 아이콘 = 보미 얼굴
-          Container(
-            width: 42,
-            height: 42,
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              color: AppColors.accent,
-              borderRadius: BorderRadius.circular(999),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x33F59CB3),
-                  blurRadius: 8,
-                  offset: Offset(0, 3),
-                ),
-              ],
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const ClinicalReportListPage(),
             ),
-            child: ClipOval(
-              child: Image.asset(
-                'assets/images/bomi_wink.png',
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Image.asset(
-                  'assets/images/bomi_cheer.png',
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const Icon(
-                    Icons.smart_toy_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
+          );
+        },
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.lightBlue),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.lightBlue,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.description_outlined,
+                  color: AppColors.primary,
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'AI 심혈관 건강 상담 서비스',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.text,
-                  ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '임상 보고서',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.text,
+                      ),
+                    ),
+                    SizedBox(height: 3),
+                    Text(
+                      '의사가 전달한 진단 보고서를 확인하세요.',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
-                SizedBox(height: 2),
-                Text(
-                  '상담 및 진단 결과가 곧 연결될 예정이에요!',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Color(0xFFBE185D),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.textSecondary,
+              ),
+            ],
           ),
-          const Icon(
-            Icons.chevron_right_rounded,
-            color: Color(0xFFF472B6),
-            size: 18,
-          ),
-        ],
+        ),
       ),
     );
   }
