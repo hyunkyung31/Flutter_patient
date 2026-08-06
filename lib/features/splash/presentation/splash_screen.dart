@@ -5,6 +5,8 @@ import '../../../core/storage/secure_storage.dart';
 import '../../auth/data/local/biometric_service.dart';
 import '../../auth/presentation/pages/login_page.dart';
 import '../../home/view/main_shell_page.dart';
+import '../../onboarding/data/onboarding_storage.dart';
+import '../../onboarding/presentation/bomi_onboarding_screen.dart';
 
 /// VENA 브랜드 스플래시
 ///
@@ -85,6 +87,19 @@ class _SplashScreenState extends State<SplashScreen>
   Future<void> _goNext() async {
     if (!mounted || _navigated) return;
     _navigated = true;
+
+    final bool isOnboardingCompleted = await OnboardingStorage.isCompleted();
+
+    if (!mounted) {
+      return;
+    }
+
+    if (!isOnboardingCompleted) {
+      Navigator.of(
+        context,
+      ).pushReplacement(_fadeRoute(const BomiOnboardingScreen()));
+      return;
+    }
 
     try {
       final hasTokens = await SecureStorageService.hasTokens();
