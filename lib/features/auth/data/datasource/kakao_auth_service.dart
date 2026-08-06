@@ -254,6 +254,82 @@ class KakaoAuthService implements AuthRemoteDataSource {
   }
 
   @override
+  Future<LoginResponse> loginWithPassword({
+    required String username,
+    required String password,
+  }) async {
+    final requestUrl = '${AppConfig.apiBaseUrl}${ApiEndpoints.patientLogin}';
+    final id = username.trim();
+    if (id.isEmpty) {
+      throw Exception('아이디를 입력해주세요.');
+    }
+    if (password.isEmpty) {
+      throw Exception('비밀번호를 입력해주세요.');
+    }
+
+    try {
+      final response = await ApiClient.dio.post(
+        ApiEndpoints.patientLogin,
+        data: {
+          'username': id,
+          'password': password,
+        },
+      );
+      return _parseLoginResponse(response.data);
+    } on DioException catch (e) {
+      throw Exception(
+        _mapDioError(e, requestUrl, actionLabel: '로그인'),
+      );
+    }
+  }
+
+  @override
+  Future<LoginResponse> signupWithPassword({
+    required String name,
+    required String phone,
+    required String birthDate,
+    required String password,
+    String? username,
+  }) async {
+    final requestUrl = '${AppConfig.apiBaseUrl}${ApiEndpoints.patientSignup}';
+    final normalizedPhone = _normalizePhone(phone);
+    final normalizedBirth = _normalizeBirthDate(birthDate);
+    final normalizedName = name.trim();
+    final loginId =
+        (username == null || username.trim().isEmpty)
+            ? normalizedPhone
+            : username.trim();
+
+    if (normalizedName.isEmpty) {
+      throw Exception('이름을 입력해주세요.');
+    }
+    if (normalizedPhone.length != 11 || !normalizedPhone.startsWith('010')) {
+      throw Exception('전화번호는 010으로 시작하는 11자리여야 합니다.');
+    }
+    if (password.length < 4) {
+      throw Exception('비밀번호는 4자 이상이어야 합니다.');
+    }
+
+    try {
+      final response = await ApiClient.dio.post(
+        ApiEndpoints.patientSignup,
+        data: {
+          'name': normalizedName,
+          'phone': normalizedPhone,
+          'birthDate': normalizedBirth,
+          'password': password,
+          'username': loginId,
+        },
+      );
+      return _parseLoginResponse(response.data);
+    } on DioException catch (e) {
+      throw Exception(
+        _mapDioError(e, requestUrl, actionLabel: '회원가입'),
+      );
+    }
+  }
+
+  @override
   Future<void> logout() async {
     await UserApi.instance.logout();
   }

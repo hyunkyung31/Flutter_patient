@@ -3,6 +3,8 @@ class ApiEndpoints {
   // trailing slash 필수 (없으면 Django 404)
   static const String kakaoLogin = '/api/auth/kakao/login/';
   static const String kakaoSignup = '/api/auth/kakao/signup/';
+  static const String patientLogin = '/api/auth/patient/login/';
+  static const String patientSignup = '/api/auth/patient/signup/';
   static const String refresh = '/api/token/refresh/';
   static const String me = '/api/me/';
 
