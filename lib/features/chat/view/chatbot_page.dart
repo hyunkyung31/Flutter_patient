@@ -33,6 +33,9 @@ class _ChatbotPageState extends State<ChatbotPage> {
   bool _sending = false;
   String? _error;
 
+  static const _welcomeText =
+      '안녕하세요.\n저는 보미입니다.\n궁금한 점을 편하게 물어보세요.';
+
   @override
   void initState() {
     super.initState();
@@ -48,6 +51,14 @@ class _ChatbotPageState extends State<ChatbotPage> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _send(initial);
       });
+    } else {
+      _messages.add(
+        ChatMessageItem(
+          role: 'assistant',
+          content: _welcomeText,
+          createdAt: DateTime.now(),
+        ),
+      );
     }
   }
 
@@ -136,6 +147,22 @@ class _ChatbotPageState extends State<ChatbotPage> {
     }
   }
 
+  void _clearChat() {
+    setState(() {
+      _sessionId = null;
+      _error = null;
+      _messages
+        ..clear()
+        ..add(
+          ChatMessageItem(
+            role: 'assistant',
+            content: _welcomeText,
+            createdAt: DateTime.now(),
+          ),
+        );
+    });
+  }
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
@@ -159,7 +186,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
         actions: [
           if (_sessionId != null)
             Padding(
-              padding: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.only(right: 4),
               child: Center(
                 child: Text(
                   '#$_sessionId',
@@ -170,6 +197,11 @@ class _ChatbotPageState extends State<ChatbotPage> {
                 ),
               ),
             ),
+          IconButton(
+            tooltip: '새 상담',
+            onPressed: _sending || _loadingHistory ? null : _clearChat,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
         ],
       ),
       body: Column(
@@ -281,30 +313,54 @@ class _Bubble extends StatelessWidget {
     final isUser = message.isUser;
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * 0.78,
-        ),
-        decoration: BoxDecoration(
-          color: isUser ? AppColors.secondary : AppColors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isUser ? 16 : 4),
-            bottomRight: Radius.circular(isUser ? 4 : 16),
-          ),
-          border: isUser ? null : Border.all(color: AppColors.lightBlue),
-        ),
-        child: Text(
-          message.content,
-          style: TextStyle(
-            fontSize: 14,
-            height: 1.45,
-            fontWeight: FontWeight.w500,
-            color: isUser ? Colors.white : AppColors.text,
-          ),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          mainAxisAlignment:
+              isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (!isUser) ...[
+              const CircleAvatar(
+                radius: 16,
+                backgroundColor: AppColors.lightBlue,
+                child: Icon(
+                  Icons.smart_toy_outlined,
+                  size: 18,
+                  color: AppColors.secondary,
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            Flexible(
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.sizeOf(context).width * 0.72,
+                ),
+                decoration: BoxDecoration(
+                  color: isUser ? AppColors.secondary : AppColors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(16),
+                    topRight: const Radius.circular(16),
+                    bottomLeft: Radius.circular(isUser ? 16 : 4),
+                    bottomRight: Radius.circular(isUser ? 4 : 16),
+                  ),
+                  border: isUser ? null : Border.all(color: AppColors.lightBlue),
+                ),
+                child: Text(
+                  message.content,
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 1.45,
+                    fontWeight: FontWeight.w500,
+                    color: isUser ? Colors.white : AppColors.text,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

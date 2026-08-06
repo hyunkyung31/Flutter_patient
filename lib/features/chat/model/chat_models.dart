@@ -72,15 +72,29 @@ class ChatReply {
   const ChatReply({
     required this.sessionId,
     required this.answer,
+    this.intent,
+    this.risk,
+    this.report,
   });
 
   final int sessionId;
   final String answer;
+  final Map<String, dynamic>? intent;
+  final Map<String, dynamic>? risk;
+  final Map<String, dynamic>? report;
 
   factory ChatReply.fromJson(Map<String, dynamic> json) {
+    Map<String, dynamic>? asMap(dynamic value) {
+      if (value is Map) return Map<String, dynamic>.from(value);
+      return null;
+    }
+
     return ChatReply(
       sessionId: int.tryParse(json['session_id']?.toString() ?? '') ?? 0,
       answer: (json['answer'] ?? '').toString(),
+      intent: asMap(json['intent']),
+      risk: asMap(json['risk']),
+      report: asMap(json['report']),
     );
   }
 }

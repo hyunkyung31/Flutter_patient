@@ -4,6 +4,7 @@ import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 
 import 'core/config/app_config.dart';
 import 'core/theme/app_colors.dart';
+import 'features/chat/view/chatbot_page.dart';
 import 'features/health_rewards/view/health_mission_view.dart';
 import 'features/splash/presentation/splash_screen.dart';
 
@@ -46,7 +47,10 @@ class MyApp extends StatelessWidget {
         ),
       ),
       home: const SplashScreen(),
-      routes: {'/health-rewards': (context) => const HealthMissionView()},
+      routes: {
+        '/health-rewards': (context) => const HealthMissionView(),
+        '/chatbot': (context) => const ChatbotPage(),
+      },
     );
   }
 }
