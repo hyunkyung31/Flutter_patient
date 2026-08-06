@@ -249,7 +249,7 @@ final class _HomeViewState extends State<HomeView> {
     const analyzedPatientCount = 0;
 
     final appointmentViewModel = context.watch<AppointmentViewModel>();
-    final reservationCount = appointmentViewModel.activeTodayCount;
+    final reservationCount = appointmentViewModel.activeCount;
     const waitingCount = 0;
 
     final theme = Theme.of(context);
@@ -282,8 +282,11 @@ final class _HomeViewState extends State<HomeView> {
               PatientStatusSection(
                 reservationCount: reservationCount,
                 waitingCount: waitingCount,
-                onReservationTap: () {
-                  context.pushNamed('appointments');
+                onReservationTap: () async {
+                  await context.pushNamed('appointments');
+                  if (context.mounted) {
+                    await context.read<AppointmentViewModel>().loadAppointments();
+                  }
                 },
                 onWaitingTap: () {
                   _showPreparingMessage(context);
