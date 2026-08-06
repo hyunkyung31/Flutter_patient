@@ -59,3 +59,9 @@ index 0f1481d..83b6496 100644
      }
    }
  
+@@ -229,4 +216,4 @@ final class _AppointmentCard extends StatelessWidget {
+   }
+ }
+ 
+-enum _AppointmentFilter { active, requested, confirmed, all }
++enum _AppointmentFilter { scheduled, completed }
