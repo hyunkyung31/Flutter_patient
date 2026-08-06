@@ -6,9 +6,9 @@ import 'package:patient_app/core/network/api_endpoints.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
 
 import '../model/reservation.dart';
-import '../repository/reservation_local_repository.dart';
+import '../repository/reservation_remote_repository.dart';
 
-/// 예약 신청 / 변경 폼
+/// 예약 신청 / 변경 폼 (서버 Appointment API 연동)
 class ReservationFormPage extends StatefulWidget {
   const ReservationFormPage({super.key, this.existing});
 
@@ -19,7 +19,7 @@ class ReservationFormPage extends StatefulWidget {
 }
 
 class _ReservationFormPageState extends State<ReservationFormPage> {
-  final _repo = ReservationLocalRepository();
+  final _repo = ReservationRemoteRepository();
   final _memoController = TextEditingController();
 
   static const _fallbackDepartments = [
@@ -33,6 +33,7 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
   List<_DoctorOption> _doctors = const [];
 
   String? _department;
+  String? _doctorId;
   String? _doctorName;
   DateTime? _date;
   TimeOfDay? _time;
@@ -47,6 +48,7 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
     final ex = widget.existing;
     if (ex != null) {
       _department = ex.department;
+      _doctorId = ex.doctorId;
       _doctorName = ex.doctorName;
       _date = DateTime(ex.dateTime.year, ex.dateTime.month, ex.dateTime.day);
       _time = TimeOfDay(hour: ex.dateTime.hour, minute: ex.dateTime.minute);
@@ -72,10 +74,11 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
       if (data is List) {
         for (final item in data) {
           if (item is! Map) continue;
+          final id = item['doctor_id']?.toString() ?? '';
           final name = item['doctor_name']?.toString() ?? '';
           final dept = item['department']?.toString() ?? '';
-          if (name.isEmpty) continue;
-          list.add(_DoctorOption(name: name, department: dept));
+          if (id.isEmpty || name.isEmpty) continue;
+          list.add(_DoctorOption(id: id, name: name, department: dept));
         }
       }
       if (!mounted) return;
@@ -92,24 +95,21 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
             _departments = depts;
             _department ??= depts.first;
           }
-          // 현재 과에 맞는 의사 없으면 첫 의사로
-          final filtered = _filteredDoctors;
-          if (filtered.isNotEmpty &&
-              (_doctorName == null ||
-                  !filtered.any((d) => d.name == _doctorName))) {
-            _doctorName = filtered.first.name;
+          if (_isEdit) {
+            // 변경 시 담당의는 서버에서 변경 불가 → 기존 값 유지
+            return;
           }
-        });
-      } else {
-        setState(() {
-          _doctorName ??= '담당의';
+          final filtered = _filteredDoctors;
+          if (filtered.isNotEmpty) {
+            final match = filtered.where((d) => d.id == _doctorId);
+            final selected = match.isNotEmpty ? match.first : filtered.first;
+            _doctorId = selected.id;
+            _doctorName = selected.name;
+          }
         });
       }
     } on DioException {
-      if (!mounted) return;
-      setState(() {
-        _doctorName ??= '담당의';
-      });
+      // 의사 목록 실패 시에도 신청은 primary_doctor_id 로 가능
     } finally {
       if (mounted) setState(() => _loadingDoctors = false);
     }
@@ -148,12 +148,11 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
 
   Future<void> _submit() async {
     final dept = _department?.trim() ?? '';
-    final doctor = _doctorName?.trim() ?? '';
     if (dept.isEmpty) {
       _toast('진료과를 선택해주세요.');
       return;
     }
-    if (doctor.isEmpty) {
+    if (!_isEdit && (_doctorId == null || _doctorId!.trim().isEmpty) && _doctors.isNotEmpty) {
       _toast('의사를 선택해주세요.');
       return;
     }
@@ -177,24 +176,25 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
     setState(() => _saving = true);
     try {
       if (_isEdit) {
-        final updated = widget.existing!.copyWith(
-          department: dept,
-          doctorName: doctor,
+        await _repo.update(
+          id: widget.existing!.id,
           dateTime: dt,
           memo: _memoController.text.trim(),
-          status: ReservationStatus.requested,
+          department: dept,
         );
-        await _repo.update(updated);
       } else {
         await _repo.create(
           department: dept,
-          doctorName: doctor,
+          doctorId: _doctorId,
           dateTime: dt,
           memo: _memoController.text.trim(),
         );
       }
       if (!mounted) return;
       Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      _toast(e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -233,15 +233,18 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
             items: _departments
                 .map((d) => DropdownMenuItem(value: d, child: Text(d)))
                 .toList(),
-            onChanged: (v) {
-              setState(() {
-                _department = v;
-                final filtered = _filteredDoctors;
-                if (filtered.isNotEmpty) {
-                  _doctorName = filtered.first.name;
-                }
-              });
-            },
+            onChanged: _isEdit
+                ? null
+                : (v) {
+                    setState(() {
+                      _department = v;
+                      final filtered = _filteredDoctors;
+                      if (filtered.isNotEmpty) {
+                        _doctorId = filtered.first.id;
+                        _doctorName = filtered.first.name;
+                      }
+                    });
+                  },
             decoration: _inputDecoration(),
           ),
           const SizedBox(height: 16),
@@ -252,26 +255,43 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
           const SizedBox(height: 8),
           if (_loadingDoctors)
             const LinearProgressIndicator(minHeight: 2)
-          else if (doctors.isEmpty)
+          else if (_isEdit)
             TextFormField(
-              initialValue: _doctorName ?? '담당의',
-              onChanged: (v) => _doctorName = v,
-              decoration: _inputDecoration(hint: '의사 이름'),
+              initialValue: _doctorName?.isNotEmpty == true
+                  ? _doctorName
+                  : (_doctorId ?? '담당의'),
+              enabled: false,
+              decoration: _inputDecoration(hint: '담당 의사'),
+            )
+          else if (doctors.isEmpty)
+            InputDecorator(
+              decoration: _inputDecoration(),
+              child: const Text(
+                '의사 목록을 불러오지 못했습니다. 담당의로 자동 배정됩니다.',
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              ),
             )
           else
             DropdownButtonFormField<String>(
-              value: doctors.any((d) => d.name == _doctorName)
-                  ? _doctorName
-                  : doctors.first.name,
+              value: doctors.any((d) => d.id == _doctorId)
+                  ? _doctorId
+                  : doctors.first.id,
               items: doctors
                   .map(
                     (d) => DropdownMenuItem(
-                      value: d.name,
+                      value: d.id,
                       child: Text('${d.name} (${d.department})'),
                     ),
                   )
                   .toList(),
-              onChanged: (v) => setState(() => _doctorName = v),
+              onChanged: (v) {
+                if (v == null) return;
+                final selected = doctors.firstWhere((d) => d.id == v);
+                setState(() {
+                  _doctorId = selected.id;
+                  _doctorName = selected.name;
+                });
+              },
               decoration: _inputDecoration(),
             ),
           const SizedBox(height: 16),
@@ -362,7 +382,12 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
 }
 
 class _DoctorOption {
-  const _DoctorOption({required this.name, required this.department});
+  const _DoctorOption({
+    required this.id,
+    required this.name,
+    required this.department,
+  });
+  final String id;
   final String name;
   final String department;
 }

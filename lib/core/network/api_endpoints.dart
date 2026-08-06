@@ -13,4 +13,9 @@ class ApiEndpoints {
   /// 환자 상세(+ examinations, ai_results)
   static String patientDetail(String patientId) =>
       '/api/patients/$patientId/';
+
+  /// 진료 예약 (Django Appointment)
+  static const String appointments = '/api/appointments/';
+  static const String appointmentsMe = '/api/appointments/me/';
+  static String appointmentDetail(String id) => '/api/appointments/$id/';
 }

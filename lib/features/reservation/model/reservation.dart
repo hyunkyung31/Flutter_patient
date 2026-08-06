@@ -1,7 +1,7 @@
-/// 예약 상태
+/// 예약 상태 (Django Appointment.Status 와 동일)
 enum ReservationStatus {
   requested, // 신청
-  confirmed, // 확정(병원 확인 가정)
+  confirmed, // 확정
   cancelled, // 취소
   completed, // 완료
 }
@@ -28,8 +28,11 @@ extension ReservationStatusX on ReservationStatus {
   }
 }
 
+/// Django `/api/appointments/` 응답과 맞춘 예약 모델
 class Reservation {
   final String id;
+  final String? patientId;
+  final String doctorId;
   final String department;
   final String doctorName;
   final DateTime dateTime;
@@ -40,6 +43,8 @@ class Reservation {
 
   const Reservation({
     required this.id,
+    this.patientId,
+    required this.doctorId,
     required this.department,
     required this.doctorName,
     required this.dateTime,
@@ -50,6 +55,7 @@ class Reservation {
   });
 
   Reservation copyWith({
+    String? doctorId,
     String? department,
     String? doctorName,
     DateTime? dateTime,
@@ -59,6 +65,8 @@ class Reservation {
   }) {
     return Reservation(
       id: id,
+      patientId: patientId,
+      doctorId: doctorId ?? this.doctorId,
       department: department ?? this.department,
       doctorName: doctorName ?? this.doctorName,
       dateTime: dateTime ?? this.dateTime,
@@ -71,28 +79,43 @@ class Reservation {
 
   Map<String, dynamic> toJson() => {
         'id': id,
+        'patient_id': patientId,
+        'doctor_id': doctorId,
         'department': department,
-        'doctorName': doctorName,
-        'dateTime': dateTime.toIso8601String(),
+        'doctor_name': doctorName,
+        'scheduled_at': dateTime.toIso8601String(),
         'memo': memo,
         'status': status.name,
-        'createdAt': createdAt.toIso8601String(),
-        'updatedAt': updatedAt.toIso8601String(),
+        'created_at': createdAt.toIso8601String(),
+        'updated_at': updatedAt.toIso8601String(),
       };
 
   factory Reservation.fromJson(Map<String, dynamic> json) {
+    final scheduled = json['scheduled_at'] ?? json['scheduledAt'] ?? json['dateTime'];
+    final created = json['created_at'] ?? json['createdAt'];
+    final updated = json['updated_at'] ?? json['updatedAt'];
+    final memoRaw = json['memo']?.toString();
+
     return Reservation(
       id: json['id']?.toString() ?? '',
+      patientId: json['patient_id']?.toString() ?? json['patientId']?.toString(),
+      doctorId: json['doctor_id']?.toString() ??
+          json['doctorId']?.toString() ??
+          '',
       department: json['department']?.toString() ?? '',
-      doctorName: json['doctorName']?.toString() ?? '',
-      dateTime: DateTime.tryParse(json['dateTime']?.toString() ?? '') ??
-          DateTime.now(),
-      memo: json['memo']?.toString(),
+      doctorName: json['doctor_name']?.toString() ??
+          json['doctorName']?.toString() ??
+          '',
+      dateTime: (DateTime.tryParse(scheduled?.toString() ?? '') ?? DateTime.now())
+          .toLocal(),
+      memo: (memoRaw == null || memoRaw.isEmpty) ? null : memoRaw,
       status: ReservationStatusX.fromName(json['status']?.toString()),
-      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
-          DateTime.now(),
-      updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? '') ??
-          DateTime.now(),
+      createdAt:
+          (DateTime.tryParse(created?.toString() ?? '') ?? DateTime.now())
+              .toLocal(),
+      updatedAt:
+          (DateTime.tryParse(updated?.toString() ?? '') ?? DateTime.now())
+              .toLocal(),
     );
   }
 }
