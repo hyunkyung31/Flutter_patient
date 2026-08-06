@@ -114,7 +114,7 @@ class _SignupPageState extends State<SignupPage> {
       return;
     }
 
-    if not widget.isKakaoLink) {
+    if (!widget.isKakaoLink) {
       if (username.length < 3) {
         setState(() => _errorMessage = '아이디는 3자 이상 입력해주세요.');
         return;
