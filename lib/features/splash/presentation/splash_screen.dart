@@ -89,7 +89,7 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted || _navigated) return;
 
     try {
-      // 디버그 실행에서는 시연을 위해 온보딩 완료 기록 초기화
+      // 개발 중에는 앱을 다시 실행할 때마다 온보딩 표시
       if (kDebugMode) {
         await OnboardingStorage.reset();
       }
@@ -100,7 +100,6 @@ class _SplashScreenState extends State<SplashScreen>
 
       if (!mounted || _navigated) return;
 
-      // 온보딩을 아직 완료하지 않았다면 온보딩 화면으로 이동
       if (!onboardingCompleted) {
         _navigated = true;
 
@@ -110,7 +109,7 @@ class _SplashScreenState extends State<SplashScreen>
         return;
       }
 
-      // 최신 main에 추가된 로그인 세션 확인 코드 유지
+      // 온보딩 완료 후 로그인 세션 확인
       final summary = await SecureStorageService.debugSessionSummary();
 
       debugPrint('Splash session: $summary');
