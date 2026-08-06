@@ -6,6 +6,8 @@ import '../../../core/storage/secure_storage.dart';
 import '../../auth/data/local/biometric_service.dart';
 import '../../auth/presentation/pages/login_page.dart';
 import '../../home/view/main_shell_page.dart';
+import '../../onboarding/data/onboarding_storage.dart';
+import '../../onboarding/presentation/bomi_onboarding_screen.dart';
 
 /// VENA 브랜드 스플래시
 ///
@@ -90,17 +92,32 @@ class _SplashScreenState extends State<SplashScreen>
       final summary = await SecureStorageService.debugSessionSummary();
       debugPrint('Splash session: $summary');
 
+      // 온보딩 미완료면 온보딩 먼저
+      final onboardingCompleted = await OnboardingStorage.isCompleted();
+      if (!mounted) return;
+      if (!onboardingCompleted) {
+        _navigated = true;
+        Navigator.of(context).pushReplacement(
+          _fadeRoute(const BomiOnboardingScreen()),
+        );
+        return;
+      }
+
       final hasTokens = await SecureStorageService.hasTokens();
       final autoLogin = await SecureStorageService.isAutoLoginEnabled();
 
       if (hasTokens && autoLogin) {
-        final biometricOn = await SecureStorageService.isBiometricEnabled();
+        final bool biometricOn =
+            await SecureStorageService.isBiometricEnabled();
+
         if (biometricOn) {
-          final canBio = await _biometric.canCheckBiometrics();
+          final bool canBio = await _biometric.canCheckBiometrics();
+
           if (canBio) {
-            final ok = await _biometric.authenticate(
+            final bool ok = await _biometric.authenticate(
               reason: '자동로그인을 위해 생체인증을 진행합니다.',
             );
+
             if (!ok) {
               debugPrint('Splash: biometric failed → login');
               _openLogin();
@@ -120,14 +137,16 @@ class _SplashScreenState extends State<SplashScreen>
         Navigator.of(context).pushReplacement(
           _fadeRoute(MainShellPage(patientName: name, patientId: patientId)),
         );
+
         return;
       }
 
       debugPrint(
         'Splash: skip auto-login (hasTokens=$hasTokens autoLogin=$autoLogin)',
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('Splash auto-login error: $e');
+      debugPrintStack(stackTrace: stackTrace);
     }
 
     _openLogin();
