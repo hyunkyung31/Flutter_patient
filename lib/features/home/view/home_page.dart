@@ -43,7 +43,7 @@ class HomePage extends StatelessWidget {
 
     return Column(
       children: [
-        const _HomeHeader(),
+        _HomeHeader(onOpenReservation: () => onOpenTab?.call(1)),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
@@ -72,8 +72,54 @@ class HomePage extends StatelessWidget {
   }
 }
 
-class _HomeHeader extends StatelessWidget {
-  const _HomeHeader();
+class _HomeHeader extends StatefulWidget {
+  const _HomeHeader({this.onOpenReservation});
+
+  final VoidCallback? onOpenReservation;
+
+  @override
+  State<_HomeHeader> createState() => _HomeHeaderState();
+}
+
+class _HomeHeaderState extends State<_HomeHeader> {
+  late Future<int> _confirmedCountFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _confirmedCountFuture = _loadConfirmedCount();
+  }
+
+  Future<int> _loadConfirmedCount() async {
+    try {
+      final list = await ReservationRemoteRepository().fetchAll();
+      return list
+          .where((e) => e.status == ReservationStatus.confirmed)
+          .length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<void> _onNotificationTap() async {
+    final count = await _confirmedCountFuture;
+    if (!mounted) return;
+
+    final message = count > 0
+        ? '확정된 예약이 $count건 있습니다. 예약 탭에서 확인해 주세요.'
+        : '새로운 예약 확정 알림이 없습니다.';
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+    widget.onOpenReservation?.call();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -105,24 +151,26 @@ class _HomeHeader extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          IconButton(
-            onPressed: () {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('새로운 건강 알림이 있습니다.')));
-            },
-            icon: const Badge(
-              smallSize: 8,
-              backgroundColor: Color(0xFFEF4444),
-              child: Icon(
+          FutureBuilder<int>(
+            future: _confirmedCountFuture,
+            builder: (context, snap) {
+              final count = snap.data ?? 0;
+              final icon = Icon(
                 Icons.notifications_none_rounded,
                 color: AppColors.primary,
-              ),
-            ),
-          ),
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.menu_rounded, color: AppColors.primary),
+              );
+              return IconButton(
+                tooltip: '예약 확정 알림',
+                onPressed: _onNotificationTap,
+                icon: count > 0
+                    ? Badge(
+                        smallSize: 8,
+                        backgroundColor: const Color(0xFFEF4444),
+                        child: icon,
+                      )
+                    : icon,
+              );
+            },
           ),
         ],
       ),
