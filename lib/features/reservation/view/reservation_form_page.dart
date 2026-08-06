@@ -6,9 +6,9 @@ import 'package:patient_app/core/network/api_endpoints.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
 
 import '../model/reservation.dart';
-import '../repository/reservation_local_repository.dart';
+import '../repository/reservation_remote_repository.dart';
 
-/// 예약 신청 / 변경 폼
+/// 예약 신청 / 변경 폼 (서버 Appointment API 연동)
 class ReservationFormPage extends StatefulWidget {
   const ReservationFormPage({super.key, this.existing});
 
@@ -19,7 +19,7 @@ class ReservationFormPage extends StatefulWidget {
 }
 
 class _ReservationFormPageState extends State<ReservationFormPage> {
-  final _repo = ReservationLocalRepository();
+  final _repo = ReservationRemoteRepository();
   final _memoController = TextEditingController();
 
   static const _fallbackDepartments = [
@@ -33,11 +33,17 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
   List<_DoctorOption> _doctors = const [];
 
   String? _department;
+  String? _doctorId;
   String? _doctorName;
   DateTime? _date;
   TimeOfDay? _time;
   bool _saving = false;
   bool _loadingDoctors = false;
+
+  /// 진료 예약 가능 시간 (30분 단위)
+  static const _slotStartHour = 9;
+  static const _slotEndHour = 17;
+  static const _slotEndMinute = 30;
 
   bool get _isEdit => widget.existing != null;
 
@@ -47,9 +53,12 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
     final ex = widget.existing;
     if (ex != null) {
       _department = ex.department;
+      _doctorId = ex.doctorId;
       _doctorName = ex.doctorName;
       _date = DateTime(ex.dateTime.year, ex.dateTime.month, ex.dateTime.day);
-      _time = TimeOfDay(hour: ex.dateTime.hour, minute: ex.dateTime.minute);
+      _time = _snapToHalfHour(
+        TimeOfDay(hour: ex.dateTime.hour, minute: ex.dateTime.minute),
+      );
       _memoController.text = ex.memo ?? '';
     } else {
       _department = _departments.first;
@@ -72,10 +81,11 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
       if (data is List) {
         for (final item in data) {
           if (item is! Map) continue;
+          final id = item['doctor_id']?.toString() ?? '';
           final name = item['doctor_name']?.toString() ?? '';
           final dept = item['department']?.toString() ?? '';
-          if (name.isEmpty) continue;
-          list.add(_DoctorOption(name: name, department: dept));
+          if (id.isEmpty || name.isEmpty) continue;
+          list.add(_DoctorOption(id: id, name: name, department: dept));
         }
       }
       if (!mounted) return;
@@ -92,24 +102,21 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
             _departments = depts;
             _department ??= depts.first;
           }
-          // 현재 과에 맞는 의사 없으면 첫 의사로
-          final filtered = _filteredDoctors;
-          if (filtered.isNotEmpty &&
-              (_doctorName == null ||
-                  !filtered.any((d) => d.name == _doctorName))) {
-            _doctorName = filtered.first.name;
+          if (_isEdit) {
+            // 변경 시 담당의는 서버에서 변경 불가 → 기존 값 유지
+            return;
           }
-        });
-      } else {
-        setState(() {
-          _doctorName ??= '담당의';
+          final filtered = _filteredDoctors;
+          if (filtered.isNotEmpty) {
+            final match = filtered.where((d) => d.id == _doctorId);
+            final selected = match.isNotEmpty ? match.first : filtered.first;
+            _doctorId = selected.id;
+            _doctorName = selected.name;
+          }
         });
       }
     } on DioException {
-      if (!mounted) return;
-      setState(() {
-        _doctorName ??= '담당의';
-      });
+      // 의사 목록 실패 시에도 신청은 primary_doctor_id 로 가능
     } finally {
       if (mounted) setState(() => _loadingDoctors = false);
     }
@@ -123,37 +130,169 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
     return filtered.isEmpty ? _doctors : filtered;
   }
 
+  TimeOfDay _snapToHalfHour(TimeOfDay time) {
+    final totalMinutes = time.hour * 60 + time.minute;
+    final snapped = ((totalMinutes + 15) ~/ 30) * 30;
+    final minMinutes = _slotStartHour * 60;
+    final maxMinutes = _slotEndHour * 60 + _slotEndMinute;
+    final clamped = snapped < minMinutes
+        ? minMinutes
+        : snapped > maxMinutes
+            ? maxMinutes
+            : snapped;
+    return TimeOfDay(hour: clamped ~/ 60, minute: clamped % 60);
+  }
+
+  List<TimeOfDay> _halfHourSlots() {
+    final slots = <TimeOfDay>[];
+    var minutes = _slotStartHour * 60;
+    final end = _slotEndHour * 60 + _slotEndMinute;
+    while (minutes <= end) {
+      slots.add(TimeOfDay(hour: minutes ~/ 60, minute: minutes % 60));
+      minutes += 30;
+    }
+    return slots;
+  }
+
+  bool _isSlotAvailable(TimeOfDay slot) {
+    final date = _date;
+    if (date == null) return true;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final selectedDay = DateTime(date.year, date.month, date.day);
+    if (selectedDay.isAfter(today)) return true;
+    if (selectedDay.isBefore(today)) return false;
+    final slotDateTime = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      slot.hour,
+      slot.minute,
+    );
+    return !slotDateTime.isBefore(now);
+  }
+
+  String _formatSlot(TimeOfDay slot) {
+    final hour = slot.hour.toString().padLeft(2, '0');
+    final minute = slot.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
   Future<void> _pickDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: _date ?? now.add(const Duration(days: 1)),
+      // 홈 '오늘의 환자 현황'과 맞추기 위해 기본 선택일을 오늘로 둔다.
+      initialDate: _date ?? DateTime(now.year, now.month, now.day),
       firstDate: DateTime(now.year, now.month, now.day),
       lastDate: now.add(const Duration(days: 180)),
       helpText: '예약 날짜',
     );
     if (picked == null) return;
-    setState(() => _date = picked);
+    setState(() {
+      _date = picked;
+      // 날짜 변경 후 지난 시간대면 선택 해제
+      if (_time != null && !_isSlotAvailable(_time!)) {
+        _time = null;
+      }
+    });
   }
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(
+    if (_date == null) {
+      _toast('날짜를 먼저 선택해주세요.');
+      return;
+    }
+
+    final slots = _halfHourSlots();
+    final available = slots.where(_isSlotAvailable).toList(growable: false);
+    if (available.isEmpty) {
+      _toast('선택한 날짜에 예약 가능한 시간이 없습니다.');
+      return;
+    }
+
+    final selected = await showModalBottomSheet<TimeOfDay>(
       context: context,
-      initialTime: _time ?? const TimeOfDay(hour: 10, minute: 0),
-      helpText: '예약 시간',
+      isScrollControlled: true,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.lightBlue,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  '예약 시간',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.text,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  '30분 단위로 선택하세요 (09:00 ~ 17:30)',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.5,
+                  ),
+                  child: SingleChildScrollView(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final slot in slots)
+                          _TimeSlotChip(
+                            label: _formatSlot(slot),
+                            selected: _time?.hour == slot.hour &&
+                                _time?.minute == slot.minute,
+                            enabled: _isSlotAvailable(slot),
+                            onTap: () => Navigator.pop(sheetContext, slot),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
-    if (picked == null) return;
-    setState(() => _time = picked);
+
+    if (selected == null) return;
+    setState(() => _time = selected);
   }
 
   Future<void> _submit() async {
     final dept = _department?.trim() ?? '';
-    final doctor = _doctorName?.trim() ?? '';
     if (dept.isEmpty) {
       _toast('진료과를 선택해주세요.');
       return;
     }
-    if (doctor.isEmpty) {
+    if (!_isEdit && (_doctorId == null || _doctorId!.trim().isEmpty) && _doctors.isNotEmpty) {
       _toast('의사를 선택해주세요.');
       return;
     }
@@ -177,24 +316,25 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
     setState(() => _saving = true);
     try {
       if (_isEdit) {
-        final updated = widget.existing!.copyWith(
-          department: dept,
-          doctorName: doctor,
+        await _repo.update(
+          id: widget.existing!.id,
           dateTime: dt,
           memo: _memoController.text.trim(),
-          status: ReservationStatus.requested,
+          department: dept,
         );
-        await _repo.update(updated);
       } else {
         await _repo.create(
           department: dept,
-          doctorName: doctor,
+          doctorId: _doctorId,
           dateTime: dt,
           memo: _memoController.text.trim(),
         );
       }
       if (!mounted) return;
       Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      _toast(e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -209,7 +349,7 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
     final dateLabel = _date == null
         ? '날짜 선택'
         : DateFormat('yyyy.MM.dd').format(_date!);
-    final timeLabel = _time == null ? '시간 선택' : _time!.format(context);
+    final timeLabel = _time == null ? '시간 선택' : _formatSlot(_time!);
     final doctors = _filteredDoctors;
 
     return Scaffold(
@@ -233,15 +373,18 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
             items: _departments
                 .map((d) => DropdownMenuItem(value: d, child: Text(d)))
                 .toList(),
-            onChanged: (v) {
-              setState(() {
-                _department = v;
-                final filtered = _filteredDoctors;
-                if (filtered.isNotEmpty) {
-                  _doctorName = filtered.first.name;
-                }
-              });
-            },
+            onChanged: _isEdit
+                ? null
+                : (v) {
+                    setState(() {
+                      _department = v;
+                      final filtered = _filteredDoctors;
+                      if (filtered.isNotEmpty) {
+                        _doctorId = filtered.first.id;
+                        _doctorName = filtered.first.name;
+                      }
+                    });
+                  },
             decoration: _inputDecoration(),
           ),
           const SizedBox(height: 16),
@@ -252,26 +395,43 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
           const SizedBox(height: 8),
           if (_loadingDoctors)
             const LinearProgressIndicator(minHeight: 2)
-          else if (doctors.isEmpty)
+          else if (_isEdit)
             TextFormField(
-              initialValue: _doctorName ?? '담당의',
-              onChanged: (v) => _doctorName = v,
-              decoration: _inputDecoration(hint: '의사 이름'),
+              initialValue: _doctorName?.isNotEmpty == true
+                  ? _doctorName
+                  : (_doctorId ?? '담당의'),
+              enabled: false,
+              decoration: _inputDecoration(hint: '담당 의사'),
+            )
+          else if (doctors.isEmpty)
+            InputDecorator(
+              decoration: _inputDecoration(),
+              child: const Text(
+                '의사 목록을 불러오지 못했습니다. 담당의로 자동 배정됩니다.',
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              ),
             )
           else
             DropdownButtonFormField<String>(
-              value: doctors.any((d) => d.name == _doctorName)
-                  ? _doctorName
-                  : doctors.first.name,
+              value: doctors.any((d) => d.id == _doctorId)
+                  ? _doctorId
+                  : doctors.first.id,
               items: doctors
                   .map(
                     (d) => DropdownMenuItem(
-                      value: d.name,
+                      value: d.id,
                       child: Text('${d.name} (${d.department})'),
                     ),
                   )
                   .toList(),
-              onChanged: (v) => setState(() => _doctorName = v),
+              onChanged: (v) {
+                if (v == null) return;
+                final selected = doctors.firstWhere((d) => d.id == v);
+                setState(() {
+                  _doctorId = selected.id;
+                  _doctorName = selected.name;
+                });
+              },
               decoration: _inputDecoration(),
             ),
           const SizedBox(height: 16),
@@ -362,7 +522,62 @@ class _ReservationFormPageState extends State<ReservationFormPage> {
 }
 
 class _DoctorOption {
-  const _DoctorOption({required this.name, required this.department});
+  const _DoctorOption({
+    required this.id,
+    required this.name,
+    required this.department,
+  });
+  final String id;
   final String name;
   final String department;
+}
+
+class _TimeSlotChip extends StatelessWidget {
+  const _TimeSlotChip({
+    required this.label,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final background = !enabled
+        ? AppColors.background
+        : selected
+            ? AppColors.primary
+            : AppColors.lightBlue;
+    final foreground = !enabled
+        ? AppColors.textSecondary.withValues(alpha: 0.45)
+        : selected
+            ? AppColors.white
+            : AppColors.primary;
+
+    return Material(
+      color: background,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 76,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: foreground,
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

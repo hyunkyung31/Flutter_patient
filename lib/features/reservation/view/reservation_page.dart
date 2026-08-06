@@ -3,10 +3,10 @@ import 'package:intl/intl.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
 
 import '../model/reservation.dart';
-import '../repository/reservation_local_repository.dart';
+import '../repository/reservation_remote_repository.dart';
 import 'reservation_form_page.dart';
 
-/// 예약 탭: 목록 조회 + 신청/변경/취소
+/// 예약 탭: 서버 목록 조회 + 신청/변경/취소
 class ReservationPage extends StatefulWidget {
   const ReservationPage({super.key});
 
@@ -15,7 +15,7 @@ class ReservationPage extends StatefulWidget {
 }
 
 class _ReservationPageState extends State<ReservationPage> {
-  final _repo = ReservationLocalRepository();
+  final _repo = ReservationRemoteRepository();
   late Future<List<Reservation>> _future;
 
   @override
@@ -77,12 +77,21 @@ class _ReservationPageState extends State<ReservationPage> {
       ),
     );
     if (ok != true) return;
-    await _repo.cancel(item.id);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('예약이 취소되었습니다.')),
-    );
-    await _reload();
+    try {
+      await _repo.cancel(item.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('예약이 취소되었습니다.')),
+      );
+      await _reload();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+        ),
+      );
+    }
   }
 
   @override
@@ -123,7 +132,7 @@ class _ReservationPageState extends State<ReservationPage> {
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 24),
             child: Text(
-              '신청 · 조회 · 변경 (현재 로컬 저장, 서버 API 연결 예정)',
+              '신청 · 조회 · 변경 · 취소 (의사 앱과 서버 예약 연동)',
               style: TextStyle(
                 fontSize: 12.5,
                 color: AppColors.textSecondary,
@@ -137,6 +146,14 @@ class _ReservationPageState extends State<ReservationPage> {
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
+                }
+                if (snap.hasError) {
+                  return _ErrorView(
+                    message: snap.error
+                        .toString()
+                        .replaceFirst('Exception: ', ''),
+                    onRetry: _reload,
+                  );
                 }
                 final items = snap.data ?? const <Reservation>[];
                 if (items.isEmpty) {
@@ -162,6 +179,47 @@ class _ReservationPageState extends State<ReservationPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  const _ErrorView({required this.message, required this.onRetry});
+
+  final String message;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.cloud_off_outlined,
+              size: 56,
+              color: AppColors.textSecondary,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13.5,
+                height: 1.45,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton(
+              onPressed: onRetry,
+              child: const Text('다시 시도'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -288,7 +346,7 @@ class _ReservationCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            '담당: ${item.doctorName}',
+            '담당: ${item.doctorName.isEmpty ? item.doctorId : item.doctorName}',
             style: const TextStyle(
               fontSize: 13.5,
               color: AppColors.textSecondary,

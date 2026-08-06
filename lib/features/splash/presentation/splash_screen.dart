@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -85,33 +86,35 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _goNext() async {
-    if (!mounted || _navigated) {
-      return;
-    }
-
-    _navigated = true;
+    if (!mounted || _navigated) return;
 
     try {
-      // 온보딩 테스트를 위해 저장된 완료 기록을 임시 삭제
-      await OnboardingStorage.reset();
-
-      // 온보딩 완료 여부 확인
-      final bool onboardingCompleted = await OnboardingStorage.isCompleted();
-
-      debugPrint('온보딩 초기화 후 완료 여부: $onboardingCompleted');
-
-      if (!mounted) {
-        return;
+      // 디버그 실행에서는 시연을 위해 온보딩 완료 기록 초기화
+      if (kDebugMode) {
+        await OnboardingStorage.reset();
       }
 
+      final bool onboardingCompleted = await OnboardingStorage.isCompleted();
+
+      debugPrint('Splash onboarding completed: $onboardingCompleted');
+
+      if (!mounted || _navigated) return;
+
+      // 온보딩을 아직 완료하지 않았다면 온보딩 화면으로 이동
       if (!onboardingCompleted) {
+        _navigated = true;
+
         Navigator.of(
           context,
         ).pushReplacement(_fadeRoute(const BomiOnboardingScreen()));
         return;
       }
 
-      // 3. 온보딩을 완료한 경우 기존 자동 로그인 확인
+      // 최신 main에 추가된 로그인 세션 확인 코드 유지
+      final summary = await SecureStorageService.debugSessionSummary();
+
+      debugPrint('Splash session: $summary');
+
       final bool hasTokens = await SecureStorageService.hasTokens();
 
       final bool autoLogin = await SecureStorageService.isAutoLoginEnabled();
@@ -129,6 +132,7 @@ class _SplashScreenState extends State<SplashScreen>
             );
 
             if (!ok) {
+              debugPrint('Splash: biometric failed → login');
               _openLogin();
               return;
             }
@@ -139,30 +143,31 @@ class _SplashScreenState extends State<SplashScreen>
 
         final String? patientId = await SecureStorageService.getPatientId();
 
-        if (!mounted) {
-          return;
-        }
+        if (!mounted || _navigated) return;
+
+        _navigated = true;
 
         Navigator.of(context).pushReplacement(
           _fadeRoute(MainShellPage(patientName: name, patientId: patientId)),
         );
-
         return;
       }
-    } catch (error, stackTrace) {
-      debugPrint('스플래시 이동 오류: $error');
-      debugPrintStack(stackTrace: stackTrace);
-    }
 
-    if (!mounted) {
-      return;
+      debugPrint(
+        'Splash: skip auto-login '
+        '(hasTokens=$hasTokens autoLogin=$autoLogin)',
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Splash onboarding/auto-login error: $error');
+      debugPrintStack(stackTrace: stackTrace);
     }
 
     _openLogin();
   }
 
   void _openLogin() {
-    if (!mounted) return;
+    if (!mounted || _navigated) return;
+    _navigated = true;
     Navigator.of(context).pushReplacement(_fadeRoute(const LoginPage()));
   }
 

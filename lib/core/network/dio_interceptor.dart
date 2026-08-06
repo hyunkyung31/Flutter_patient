@@ -17,6 +17,8 @@ class DioInterceptor extends Interceptor {
     final path = options.path;
     final skipAuth = path.contains(ApiEndpoints.kakaoLogin) ||
         path.contains(ApiEndpoints.kakaoSignup) ||
+        path.contains(ApiEndpoints.patientLogin) ||
+        path.contains(ApiEndpoints.patientSignup) ||
         path.contains(ApiEndpoints.refresh) ||
         path.contains('/api/login/');
 
@@ -39,7 +41,9 @@ class DioInterceptor extends Interceptor {
     final path = err.requestOptions.path;
     if (path.contains(ApiEndpoints.refresh) ||
         path.contains(ApiEndpoints.kakaoLogin) ||
-        path.contains(ApiEndpoints.kakaoSignup)) {
+        path.contains(ApiEndpoints.kakaoSignup) ||
+        path.contains(ApiEndpoints.patientLogin) ||
+        path.contains(ApiEndpoints.patientSignup)) {
       handler.next(err);
       return;
     }

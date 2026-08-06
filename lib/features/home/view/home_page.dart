@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
 
 import '../../health_rewards/services/step_counter_service.dart';
+import '../../reservation/model/reservation.dart';
+import '../../reservation/repository/reservation_remote_repository.dart';
 import 'package:patient_app/features/ai_consultation/widgets/ai_consultation_preview.dart';
 
 // 시간대별 이미지 선택 함수
@@ -41,7 +43,7 @@ class HomePage extends StatelessWidget {
 
     return Column(
       children: [
-        const _HomeHeader(),
+        _HomeHeader(onOpenReservation: () => onOpenTab?.call(1)),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
@@ -60,13 +62,7 @@ class HomePage extends StatelessWidget {
                 // 걸음수 카드 (보미 크게 오버랩) → 건강정원
                 _StepsCard(onTap: () => onOpenTab?.call(3)),
                 const SizedBox(height: 12),
-                AiConsultationPreview(
-                  onQuestionSubmitted: (question) {
-                    debugPrint('선택한 AI 상담 질문: $question');
-
-                    // TODO: 팀장님이 AI 답변 화면 이동 또는 AI 처리 코드 연결
-                  },
-                ),
+                const AiConsultationPreview(),
               ],
             ),
           ),
@@ -76,8 +72,54 @@ class HomePage extends StatelessWidget {
   }
 }
 
-class _HomeHeader extends StatelessWidget {
-  const _HomeHeader();
+class _HomeHeader extends StatefulWidget {
+  const _HomeHeader({this.onOpenReservation});
+
+  final VoidCallback? onOpenReservation;
+
+  @override
+  State<_HomeHeader> createState() => _HomeHeaderState();
+}
+
+class _HomeHeaderState extends State<_HomeHeader> {
+  late Future<int> _confirmedCountFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _confirmedCountFuture = _loadConfirmedCount();
+  }
+
+  Future<int> _loadConfirmedCount() async {
+    try {
+      final list = await ReservationRemoteRepository().fetchAll();
+      return list
+          .where((e) => e.status == ReservationStatus.confirmed)
+          .length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<void> _onNotificationTap() async {
+    final count = await _confirmedCountFuture;
+    if (!mounted) return;
+
+    final message = count > 0
+        ? '확정된 예약이 $count건 있습니다. 예약 탭에서 확인해 주세요.'
+        : '새로운 예약 확정 알림이 없습니다.';
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+    widget.onOpenReservation?.call();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -109,24 +151,26 @@ class _HomeHeader extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          IconButton(
-            onPressed: () {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('새로운 건강 알림이 있습니다.')));
-            },
-            icon: const Badge(
-              smallSize: 8,
-              backgroundColor: Color(0xFFEF4444),
-              child: Icon(
+          FutureBuilder<int>(
+            future: _confirmedCountFuture,
+            builder: (context, snap) {
+              final count = snap.data ?? 0;
+              final icon = Icon(
                 Icons.notifications_none_rounded,
                 color: AppColors.primary,
-              ),
-            ),
-          ),
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.menu_rounded, color: AppColors.primary),
+              );
+              return IconButton(
+                tooltip: '예약 확정 알림',
+                onPressed: _onNotificationTap,
+                icon: count > 0
+                    ? Badge(
+                        smallSize: 8,
+                        backgroundColor: const Color(0xFFEF4444),
+                        child: icon,
+                      )
+                    : icon,
+              );
+            },
           ),
         ],
       ),
@@ -291,11 +335,41 @@ class _WelcomeCardState extends State<_WelcomeCard> {
   }
 }
 
-class _SummaryCards extends StatelessWidget {
+class _SummaryCards extends StatefulWidget {
   const _SummaryCards({this.onReservation, this.onExamHistory});
 
   final VoidCallback? onReservation;
   final VoidCallback? onExamHistory;
+
+  @override
+  State<_SummaryCards> createState() => _SummaryCardsState();
+}
+
+class _SummaryCardsState extends State<_SummaryCards> {
+  late Future<Reservation?> _nextReservation;
+
+  @override
+  void initState() {
+    super.initState();
+    _nextReservation = _loadNext();
+  }
+
+  Future<Reservation?> _loadNext() async {
+    try {
+      final list = await ReservationRemoteRepository().fetchAll();
+      final now = DateTime.now();
+      final upcoming = list.where((e) {
+        final active = e.status == ReservationStatus.requested ||
+            e.status == ReservationStatus.confirmed;
+        return active && e.dateTime.isAfter(now.subtract(const Duration(hours: 1)));
+      }).toList()
+        ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      if (upcoming.isEmpty) return null;
+      return upcoming.first;
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -303,14 +377,24 @@ class _SummaryCards extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: _SummaryCard(
-            title: '다음 예약',
-            icon: Icons.event_available_outlined,
-            subtitle: '아직 예정된 예약이 없어요.',
-            actionLabel: '예약하기',
-            actionColor: AppColors.lightBlue,
-            actionTextColor: AppColors.primary,
-            onTap: onReservation,
+          child: FutureBuilder<Reservation?>(
+            future: _nextReservation,
+            builder: (context, snap) {
+              final next = snap.data;
+              final subtitle = next == null
+                  ? '아직 예정된 예약이 없어요.'
+                  : '${DateFormat('M/d HH:mm').format(next.dateTime)}\n'
+                      '${next.department} · ${next.doctorName}';
+              return _SummaryCard(
+                title: '다음 예약',
+                icon: Icons.event_available_outlined,
+                subtitle: subtitle,
+                actionLabel: next == null ? '예약하기' : '예약 보기',
+                actionColor: AppColors.lightBlue,
+                actionTextColor: AppColors.primary,
+                onTap: widget.onReservation,
+              );
+            },
           ),
         ),
         const SizedBox(width: 10),
@@ -322,7 +406,7 @@ class _SummaryCards extends StatelessWidget {
             actionLabel: '검사이력',
             actionColor: const Color(0xFFF1F5F9),
             actionTextColor: AppColors.text,
-            onTap: onExamHistory,
+            onTap: widget.onExamHistory,
           ),
         ),
       ],

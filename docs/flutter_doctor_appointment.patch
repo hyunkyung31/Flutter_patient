@@ -1,0 +1,1029 @@
+From 560de29ab0e0802d129de61ca58691faec7113bd Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Thu, 6 Aug 2026 01:58:11 +0000
+Subject: [PATCH] feat(appointment): wire doctor reservation screen to Django
+ API
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add appointment list with confirm/complete/cancel actions and connect
+the home "예약 환자" card to the shared /api/appointments endpoint.
+---
+ lib/app.dart                                  |  17 +
+ lib/core/network/api_endpoints.dart           |   7 +
+ .../appointment/appointment_routes.dart       |  13 +
+ .../appointment/model/appointment.dart        |  98 +++++
+ .../repository/appointment_repository.dart    |  65 +++
+ .../service/appointment_service.dart          | 145 +++++++
+ .../view/appointment_list_view.dart           | 373 ++++++++++++++++++
+ .../view_model/appointment_view_model.dart    | 108 +++++
+ lib/features/home/view/home_view.dart         |   9 +-
+ lib/routes/app_router.dart                    |   2 +
+ test/appointment_model_test.dart              |  31 ++
+ 11 files changed, 865 insertions(+), 3 deletions(-)
+ create mode 100644 lib/features/appointment/appointment_routes.dart
+ create mode 100644 lib/features/appointment/model/appointment.dart
+ create mode 100644 lib/features/appointment/repository/appointment_repository.dart
+ create mode 100644 lib/features/appointment/service/appointment_service.dart
+ create mode 100644 lib/features/appointment/view/appointment_list_view.dart
+ create mode 100644 lib/features/appointment/view_model/appointment_view_model.dart
+ create mode 100644 test/appointment_model_test.dart
+
+diff --git a/lib/app.dart b/lib/app.dart
+index c504264..94e6ec0 100644
+--- a/lib/app.dart
++++ b/lib/app.dart
+@@ -27,6 +27,9 @@ import 'features/calendar/view_model/calendar_view_model.dart';
+ import 'features/consultation/repository/consultation_repository.dart';
+ import 'features/consultation/service/consultation_service.dart';
+ import 'features/consultation/view_model/consultation_view_model.dart';
++import 'features/appointment/repository/appointment_repository.dart';
++import 'features/appointment/service/appointment_service.dart';
++import 'features/appointment/view_model/appointment_view_model.dart';
+ import 'features/chat/view_model/chat_view_model.dart';
+ import 'features/chat/service/chat_service.dart';
+ import 'features/chat/repository/chat_repository.dart';
+@@ -121,6 +124,20 @@ class MyApp extends StatelessWidget {
+             consultationRepository: context.read<ConsultationRepository>(),
+           ),
+         ),
++        Provider<AppointmentService>(
++          create: (context) => AppointmentService(context.read<ApiClient>()),
++        ),
++        Provider<AppointmentRepository>(
++          create: (context) => AppointmentRepository(
++            appointmentService: context.read<AppointmentService>(),
++            secureStorage: context.read<SecureStorage>(),
++          ),
++        ),
++        ChangeNotifierProvider<AppointmentViewModel>(
++          create: (context) => AppointmentViewModel(
++            appointmentRepository: context.read<AppointmentRepository>(),
++          ),
++        ),
+         Provider<ChatService>(
+           create: (context) => ChatService(context.read<ApiClient>()),
+         ),
+diff --git a/lib/core/network/api_endpoints.dart b/lib/core/network/api_endpoints.dart
+index 06aae18..813e932 100644
+--- a/lib/core/network/api_endpoints.dart
++++ b/lib/core/network/api_endpoints.dart
+@@ -71,4 +71,11 @@ abstract final class ApiEndpoints {
+   static String memoAudio(int memoId) {
+     return '/api/memos/$memoId/audio/';
+   }
++
++  // 진료 예약 (Django Appointment)
++  static const String appointments = '/api/appointments/';
++
++  static String appointmentDetail(String appointmentId) {
++    return '/api/appointments/$appointmentId/';
++  }
+ }
+diff --git a/lib/features/appointment/appointment_routes.dart b/lib/features/appointment/appointment_routes.dart
+new file mode 100644
+index 0000000..13e05f1
+--- /dev/null
++++ b/lib/features/appointment/appointment_routes.dart
+@@ -0,0 +1,13 @@
++import 'package:go_router/go_router.dart';
++
++import 'view/appointment_list_view.dart';
++
++final List<RouteBase> appointmentRoutes = [
++  GoRoute(
++    path: '/appointments',
++    name: 'appointments',
++    builder: (context, state) {
++      return const AppointmentListView();
++    },
++  ),
++];
+diff --git a/lib/features/appointment/model/appointment.dart b/lib/features/appointment/model/appointment.dart
+new file mode 100644
+index 0000000..6c7e6c1
+--- /dev/null
++++ b/lib/features/appointment/model/appointment.dart
+@@ -0,0 +1,98 @@
++/// Django Appointment 상태와 동일
++enum AppointmentStatus {
++  requested,
++  confirmed,
++  cancelled,
++  completed,
++}
++
++extension AppointmentStatusX on AppointmentStatus {
++  String get label {
++    switch (this) {
++      case AppointmentStatus.requested:
++        return '신청';
++      case AppointmentStatus.confirmed:
++        return '확정';
++      case AppointmentStatus.cancelled:
++        return '취소';
++      case AppointmentStatus.completed:
++        return '완료';
++    }
++  }
++
++  static AppointmentStatus fromName(String? raw) {
++    return AppointmentStatus.values.firstWhere(
++      (e) => e.name == (raw ?? '').toLowerCase(),
++      orElse: () => AppointmentStatus.requested,
++    );
++  }
++}
++
++final class Appointment {
++  const Appointment({
++    required this.id,
++    required this.patientId,
++    required this.patientName,
++    required this.doctorId,
++    required this.doctorName,
++    required this.department,
++    required this.scheduledAt,
++    required this.status,
++    required this.memo,
++    required this.createdAt,
++    required this.updatedAt,
++  });
++
++  final String id;
++  final String patientId;
++  final String patientName;
++  final String doctorId;
++  final String doctorName;
++  final String department;
++  final DateTime scheduledAt;
++  final AppointmentStatus status;
++  final String memo;
++  final DateTime createdAt;
++  final DateTime updatedAt;
++
++  bool get isActive =>
++      status == AppointmentStatus.requested ||
++      status == AppointmentStatus.confirmed;
++
++  bool get canConfirm => status == AppointmentStatus.requested;
++
++  bool get canComplete => status == AppointmentStatus.confirmed;
++
++  bool get canCancel =>
++      status == AppointmentStatus.requested ||
++      status == AppointmentStatus.confirmed;
++
++  factory Appointment.fromJson(Map<String, dynamic> json) {
++    DateTime parseDt(dynamic raw) {
++      return (DateTime.tryParse(raw?.toString() ?? '') ?? DateTime.now())
++          .toLocal();
++    }
++
++    return Appointment(
++      id: json['id']?.toString() ?? '',
++      patientId: json['patient_id']?.toString() ??
++          json['patientId']?.toString() ??
++          '',
++      patientName: json['patient_name']?.toString() ??
++          json['patientName']?.toString() ??
++          '',
++      doctorId: json['doctor_id']?.toString() ??
++          json['doctorId']?.toString() ??
++          '',
++      doctorName: json['doctor_name']?.toString() ??
++          json['doctorName']?.toString() ??
++          '',
++      department: json['department']?.toString() ?? '',
++      scheduledAt: parseDt(json['scheduled_at'] ?? json['scheduledAt']),
++      status: AppointmentStatusX.fromName(json['status']?.toString()),
++      memo: json['memo']?.toString() ?? '',
++      createdAt: parseDt(json['created_at'] ?? json['createdAt']),
++      updatedAt: parseDt(json['updated_at'] ?? json['updatedAt']),
++    );
++  }
++}
+diff --git a/lib/features/appointment/repository/appointment_repository.dart b/lib/features/appointment/repository/appointment_repository.dart
+new file mode 100644
+index 0000000..fb718de
+--- /dev/null
++++ b/lib/features/appointment/repository/appointment_repository.dart
+@@ -0,0 +1,65 @@
++import '../../../core/storage/secure_storage.dart';
++import '../model/appointment.dart';
++import '../service/appointment_service.dart';
++
++final class AppointmentRepository {
++  const AppointmentRepository({
++    required AppointmentService appointmentService,
++    required SecureStorage secureStorage,
++  })  : _appointmentService = appointmentService,
++        _secureStorage = secureStorage;
++
++  final AppointmentService _appointmentService;
++  final SecureStorage _secureStorage;
++
++  Future<String> _requireToken() async {
++    final accessToken = await _secureStorage.readAccessToken();
++    if (accessToken == null || accessToken.isEmpty) {
++      throw const AppointmentRepositoryException(
++        '로그인 정보가 없습니다. 다시 로그인해 주세요.',
++      );
++    }
++    return accessToken;
++  }
++
++  Future<List<Appointment>> fetchAppointments({
++    String? status,
++    String? date,
++  }) async {
++    final accessToken = await _requireToken();
++    try {
++      return await _appointmentService.fetchAppointments(
++        accessToken: accessToken,
++        status: status,
++        date: date,
++      );
++    } on AppointmentServiceException catch (error) {
++      throw AppointmentRepositoryException(error.message);
++    }
++  }
++
++  Future<Appointment> updateStatus({
++    required String appointmentId,
++    required AppointmentStatus status,
++  }) async {
++    final accessToken = await _requireToken();
++    try {
++      return await _appointmentService.updateStatus(
++        accessToken: accessToken,
++        appointmentId: appointmentId,
++        status: status,
++      );
++    } on AppointmentServiceException catch (error) {
++      throw AppointmentRepositoryException(error.message);
++    }
++  }
++}
++
++final class AppointmentRepositoryException implements Exception {
++  const AppointmentRepositoryException(this.message);
++
++  final String message;
++
++  @override
++  String toString() => message;
++}
+diff --git a/lib/features/appointment/service/appointment_service.dart b/lib/features/appointment/service/appointment_service.dart
+new file mode 100644
+index 0000000..7559911
+--- /dev/null
++++ b/lib/features/appointment/service/appointment_service.dart
+@@ -0,0 +1,145 @@
++import 'package:dio/dio.dart';
++
++import '../../../core/network/api_client.dart';
++import '../../../core/network/api_endpoints.dart';
++import '../model/appointment.dart';
++
++final class AppointmentService {
++  const AppointmentService(this._apiClient);
++
++  final ApiClient _apiClient;
++
++  Future<List<Appointment>> fetchAppointments({
++    required String accessToken,
++    String? status,
++    String? date,
++  }) async {
++    try {
++      final query = <String, dynamic>{};
++      if (status != null && status.isNotEmpty) {
++        query['status'] = status;
++      }
++      if (date != null && date.isNotEmpty) {
++        query['date'] = date;
++      }
++
++      final response = await _apiClient.dio.get<dynamic>(
++        ApiEndpoints.appointments,
++        queryParameters: query.isEmpty ? null : query,
++        options: Options(
++          headers: {
++            'Authorization': 'Bearer $accessToken',
++          },
++        ),
++      );
++
++      return _parseList(response.data);
++    } on DioException catch (error) {
++      throw AppointmentServiceException(
++        _extractErrorMessage(
++          error,
++          defaultMessage: '예약 목록을 불러오지 못했습니다.',
++        ),
++      );
++    } catch (_) {
++      throw const AppointmentServiceException(
++        '예약 목록을 불러오지 못했습니다.',
++      );
++    }
++  }
++
++  Future<Appointment> updateStatus({
++    required String accessToken,
++    required String appointmentId,
++    required AppointmentStatus status,
++  }) async {
++    return _patch(
++      accessToken: accessToken,
++      appointmentId: appointmentId,
++      data: {'status': status.name},
++      defaultMessage: '예약 상태 변경에 실패했습니다.',
++    );
++  }
++
++  Future<Appointment> _patch({
++    required String accessToken,
++    required String appointmentId,
++    required Map<String, dynamic> data,
++    required String defaultMessage,
++  }) async {
++    try {
++      final response = await _apiClient.dio.patch<dynamic>(
++        ApiEndpoints.appointmentDetail(appointmentId),
++        data: data,
++        options: Options(
++          headers: {
++            'Authorization': 'Bearer $accessToken',
++            'Content-Type': 'application/json',
++          },
++        ),
++      );
++
++      final body = response.data;
++      if (body is! Map) {
++        throw AppointmentServiceException(defaultMessage);
++      }
++
++      return Appointment.fromJson(Map<String, dynamic>.from(body));
++    } on DioException catch (error) {
++      throw AppointmentServiceException(
++        _extractErrorMessage(error, defaultMessage: defaultMessage),
++      );
++    } on AppointmentServiceException {
++      rethrow;
++    } catch (_) {
++      throw AppointmentServiceException(defaultMessage);
++    }
++  }
++
++  List<Appointment> _parseList(dynamic data) {
++    List<dynamic> raw;
++    if (data is Map && data['results'] is List) {
++      raw = data['results'] as List<dynamic>;
++    } else if (data is List) {
++      raw = data;
++    } else {
++      raw = const <dynamic>[];
++    }
++
++    final list = raw
++        .whereType<Map>()
++        .map((e) => Appointment.fromJson(Map<String, dynamic>.from(e)))
++        .toList();
++    list.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
++    return list;
++  }
++
++  String _extractErrorMessage(
++    DioException error, {
++    required String defaultMessage,
++  }) {
++    final data = error.response?.data;
++
++    if (data is Map) {
++      final detail = data['detail'];
++      if (detail is String && detail.trim().isNotEmpty) {
++        return detail;
++      }
++      final message = data['message'];
++      if (message is String && message.trim().isNotEmpty) {
++        return message;
++      }
++    }
++
++    return defaultMessage;
++  }
++}
++
++final class AppointmentServiceException implements Exception {
++  const AppointmentServiceException(this.message);
++
++  final String message;
++
++  @override
++  String toString() => message;
++}
+diff --git a/lib/features/appointment/view/appointment_list_view.dart b/lib/features/appointment/view/appointment_list_view.dart
+new file mode 100644
+index 0000000..0f1481d
+--- /dev/null
++++ b/lib/features/appointment/view/appointment_list_view.dart
+@@ -0,0 +1,373 @@
++import 'package:flutter/material.dart';
++import 'package:intl/intl.dart';
++import 'package:provider/provider.dart';
++
++import '../../../core/theme/app_colors.dart';
++import '../model/appointment.dart';
++import '../view_model/appointment_view_model.dart';
++
++final class AppointmentListView extends StatefulWidget {
++  const AppointmentListView({super.key});
++
++  @override
++  State<AppointmentListView> createState() => _AppointmentListViewState();
++}
++
++final class _AppointmentListViewState extends State<AppointmentListView> {
++  _AppointmentFilter _filter = _AppointmentFilter.active;
++
++  @override
++  void initState() {
++    super.initState();
++    WidgetsBinding.instance.addPostFrameCallback((_) {
++      if (mounted) {
++        context.read<AppointmentViewModel>().loadAppointments();
++      }
++    });
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    final viewModel = context.watch<AppointmentViewModel>();
++    final items = _filtered(viewModel.appointments);
++
++    return Scaffold(
++      appBar: AppBar(
++        title: const Text('예약 환자'),
++        centerTitle: true,
++      ),
++      body: SafeArea(
++        child: Column(
++          children: [
++            Padding(
++              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
++              child: SizedBox(
++                width: double.infinity,
++                child: SegmentedButton<_AppointmentFilter>(
++                  showSelectedIcon: false,
++                  segments: const [
++                    ButtonSegment(
++                      value: _AppointmentFilter.active,
++                      label: Text('진행중'),
++                    ),
++                    ButtonSegment(
++                      value: _AppointmentFilter.requested,
++                      label: Text('신청'),
++                    ),
++                    ButtonSegment(
++                      value: _AppointmentFilter.confirmed,
++                      label: Text('확정'),
++                    ),
++                    ButtonSegment(
++                      value: _AppointmentFilter.all,
++                      label: Text('전체'),
++                    ),
++                  ],
++                  selected: {_filter},
++                  onSelectionChanged: (value) {
++                    setState(() => _filter = value.first);
++                  },
++                ),
++              ),
++            ),
++            Expanded(child: _buildBody(context, viewModel, items)),
++          ],
++        ),
++      ),
++    );
++  }
++
++  List<Appointment> _filtered(List<Appointment> source) {
++    switch (_filter) {
++      case _AppointmentFilter.active:
++        return source.where((e) => e.isActive).toList(growable: false);
++      case _AppointmentFilter.requested:
++        return source
++            .where((e) => e.status == AppointmentStatus.requested)
++            .toList(growable: false);
++      case _AppointmentFilter.confirmed:
++        return source
++            .where((e) => e.status == AppointmentStatus.confirmed)
++            .toList(growable: false);
++      case _AppointmentFilter.all:
++        return source;
++    }
++  }
++
++  Widget _buildBody(
++    BuildContext context,
++    AppointmentViewModel viewModel,
++    List<Appointment> items,
++  ) {
++    if (viewModel.isLoading && viewModel.appointments.isEmpty) {
++      return const Center(child: CircularProgressIndicator());
++    }
++
++    if (viewModel.errorMessage != null && viewModel.appointments.isEmpty) {
++      return Center(
++        child: Padding(
++          padding: const EdgeInsets.all(24),
++          child: Column(
++            mainAxisSize: MainAxisSize.min,
++            children: [
++              const Icon(Icons.error_outline, size: 56),
++              const SizedBox(height: 12),
++              Text(
++                viewModel.errorMessage!,
++                textAlign: TextAlign.center,
++              ),
++              const SizedBox(height: 16),
++              FilledButton.icon(
++                onPressed: viewModel.loadAppointments,
++                icon: const Icon(Icons.refresh),
++                label: const Text('다시 시도'),
++              ),
++            ],
++          ),
++        ),
++      );
++    }
++
++    if (items.isEmpty) {
++      return RefreshIndicator(
++        onRefresh: viewModel.loadAppointments,
++        child: ListView(
++          physics: const AlwaysScrollableScrollPhysics(),
++          children: const [
++            SizedBox(height: 120),
++            Center(
++              child: Text(
++                '표시할 예약이 없습니다.',
++                style: TextStyle(color: AppColors.textSecondary),
++              ),
++            ),
++          ],
++        ),
++      );
++    }
++
++    return RefreshIndicator(
++      onRefresh: viewModel.loadAppointments,
++      child: ListView.separated(
++        physics: const AlwaysScrollableScrollPhysics(),
++        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
++        itemCount: items.length,
++        separatorBuilder: (_, __) => const SizedBox(height: 10),
++        itemBuilder: (context, index) {
++          final item = items[index];
++          return _AppointmentCard(
++            item: item,
++            busy: viewModel.isUpdating,
++            onConfirm: () => _runAction(
++              context,
++              successMessage: '예약을 확정했습니다.',
++              action: () => viewModel.confirm(item.id),
++            ),
++            onComplete: () => _runAction(
++              context,
++              successMessage: '진료를 완료 처리했습니다.',
++              action: () => viewModel.complete(item.id),
++            ),
++            onCancel: () => _confirmCancel(context, viewModel, item),
++          );
++        },
++      ),
++    );
++  }
++
++  Future<void> _runAction(
++    BuildContext context, {
++    required String successMessage,
++    required Future<bool> Function() action,
++  }) async {
++    final ok = await action();
++    if (!context.mounted) return;
++    final viewModel = context.read<AppointmentViewModel>();
++    ScaffoldMessenger.of(context).showSnackBar(
++      SnackBar(
++        content: Text(
++          ok
++              ? successMessage
++              : (viewModel.errorMessage ?? '처리에 실패했습니다.'),
++        ),
++      ),
++    );
++  }
++
++  Future<void> _confirmCancel(
++    BuildContext context,
++    AppointmentViewModel viewModel,
++    Appointment item,
++  ) async {
++    final ok = await showDialog<bool>(
++      context: context,
++      builder: (ctx) => AlertDialog(
++        title: const Text('예약 취소'),
++        content: Text(
++          '${item.patientName.isEmpty ? item.patientId : item.patientName} 환자의\n'
++          '${DateFormat('yyyy.MM.dd HH:mm').format(item.scheduledAt)} 예약을 취소할까요?',
++        ),
++        actions: [
++          TextButton(
++            onPressed: () => Navigator.pop(ctx, false),
++            child: const Text('닫기'),
++          ),
++          FilledButton(
++            onPressed: () => Navigator.pop(ctx, true),
++            style: FilledButton.styleFrom(backgroundColor: AppColors.accent),
++            child: const Text('취소하기'),
++          ),
++        ],
++      ),
++    );
++    if (ok != true || !context.mounted) return;
++    await _runAction(
++      context,
++      successMessage: '예약을 취소했습니다.',
++      action: () => viewModel.cancel(item.id),
++    );
++  }
++}
++
++enum _AppointmentFilter { active, requested, confirmed, all }
++
++final class _AppointmentCard extends StatelessWidget {
++  const _AppointmentCard({
++    required this.item,
++    required this.busy,
++    required this.onConfirm,
++    required this.onComplete,
++    required this.onCancel,
++  });
++
++  final Appointment item;
++  final bool busy;
++  final VoidCallback onConfirm;
++  final VoidCallback onComplete;
++  final VoidCallback onCancel;
++
++  Color get _badgeColor {
++    switch (item.status) {
++      case AppointmentStatus.requested:
++        return AppColors.secondary;
++      case AppointmentStatus.confirmed:
++        return const Color(0xFF059669);
++      case AppointmentStatus.cancelled:
++        return const Color(0xFF9CA3AF);
++      case AppointmentStatus.completed:
++        return AppColors.primary;
++    }
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    final theme = Theme.of(context);
++    final patientLabel =
++        item.patientName.isEmpty ? item.patientId : item.patientName;
++    final timeText =
++        DateFormat('yyyy.MM.dd HH:mm').format(item.scheduledAt);
++
++    return Card(
++      margin: EdgeInsets.zero,
++      elevation: 0,
++      color: theme.colorScheme.surface,
++      shape: RoundedRectangleBorder(
++        borderRadius: BorderRadius.circular(14),
++        side: BorderSide(color: theme.dividerColor),
++      ),
++      child: Padding(
++        padding: const EdgeInsets.all(16),
++        child: Column(
++          crossAxisAlignment: CrossAxisAlignment.start,
++          children: [
++            Row(
++              children: [
++                Expanded(
++                  child: Text(
++                    patientLabel,
++                    style: theme.textTheme.titleMedium?.copyWith(
++                      fontWeight: FontWeight.w800,
++                    ),
++                  ),
++                ),
++                Container(
++                  padding:
++                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
++                  decoration: BoxDecoration(
++                    color: _badgeColor.withValues(alpha: 0.12),
++                    borderRadius: BorderRadius.circular(999),
++                  ),
++                  child: Text(
++                    item.status.label,
++                    style: TextStyle(
++                      fontSize: 12,
++                      fontWeight: FontWeight.w700,
++                      color: _badgeColor,
++                    ),
++                  ),
++                ),
++              ],
++            ),
++            const SizedBox(height: 6),
++            Text(
++              '${item.department} · ${item.patientId}',
++              style: const TextStyle(
++                fontSize: 13,
++                color: AppColors.textSecondary,
++              ),
++            ),
++            const SizedBox(height: 4),
++            Text(
++              timeText,
++              style: const TextStyle(
++                fontSize: 14,
++                fontWeight: FontWeight.w700,
++                color: AppColors.primary,
++              ),
++            ),
++            if (item.memo.trim().isNotEmpty) ...[
++              const SizedBox(height: 8),
++              Text(
++                item.memo,
++                style: const TextStyle(
++                  fontSize: 13,
++                  color: AppColors.textSecondary,
++                ),
++              ),
++            ],
++            if (item.canConfirm || item.canComplete || item.canCancel) ...[
++              const SizedBox(height: 12),
++              Wrap(
++                spacing: 8,
++                runSpacing: 8,
++                children: [
++                  if (item.canConfirm)
++                    FilledButton(
++                      onPressed: busy ? null : onConfirm,
++                      child: const Text('확정'),
++                    ),
++                  if (item.canComplete)
++                    FilledButton(
++                      onPressed: busy ? null : onComplete,
++                      style: FilledButton.styleFrom(
++                        backgroundColor: const Color(0xFF059669),
++                      ),
++                      child: const Text('완료'),
++                    ),
++                  if (item.canCancel)
++                    OutlinedButton(
++                      onPressed: busy ? null : onCancel,
++                      child: const Text(
++                        '취소',
++                        style: TextStyle(color: Color(0xFFB91C1C)),
++                      ),
++                    ),
++                ],
++              ),
++            ],
++          ],
++        ),
++      ),
++    );
++  }
++}
+diff --git a/lib/features/appointment/view_model/appointment_view_model.dart b/lib/features/appointment/view_model/appointment_view_model.dart
+new file mode 100644
+index 0000000..fb61ef4
+--- /dev/null
++++ b/lib/features/appointment/view_model/appointment_view_model.dart
+@@ -0,0 +1,108 @@
++import 'package:flutter/foundation.dart';
++import 'package:intl/intl.dart';
++
++import '../model/appointment.dart';
++import '../repository/appointment_repository.dart';
++
++final class AppointmentViewModel extends ChangeNotifier {
++  AppointmentViewModel({
++    required AppointmentRepository appointmentRepository,
++  }) : _appointmentRepository = appointmentRepository;
++
++  final AppointmentRepository _appointmentRepository;
++
++  List<Appointment> _appointments = <Appointment>[];
++  bool _isLoading = false;
++  bool _isUpdating = false;
++  String? _errorMessage;
++
++  List<Appointment> get appointments => List.unmodifiable(_appointments);
++  bool get isLoading => _isLoading;
++  bool get isUpdating => _isUpdating;
++  String? get errorMessage => _errorMessage;
++
++  /// 오늘 기준 신청/확정 예약 수 (홈 현황 카드)
++  int get activeTodayCount {
++    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
++    return _appointments.where((item) {
++      if (!item.isActive) return false;
++      return DateFormat('yyyy-MM-dd').format(item.scheduledAt) == today;
++    }).length;
++  }
++
++  /// 신청+확정 전체 (오늘이 아니어도 포함)
++  int get activeCount =>
++      _appointments.where((item) => item.isActive).length;
++
++  Future<void> loadAppointments({bool todayOnly = false}) async {
++    if (_isLoading) return;
++
++    _isLoading = true;
++    _errorMessage = null;
++    notifyListeners();
++
++    try {
++      final date = todayOnly
++          ? DateFormat('yyyy-MM-dd').format(DateTime.now())
++          : null;
++      _appointments = await _appointmentRepository.fetchAppointments(
++        date: date,
++      );
++    } on AppointmentRepositoryException catch (error) {
++      _errorMessage = error.message;
++    } catch (_) {
++      _errorMessage = '예약 목록을 불러오지 못했습니다.';
++    } finally {
++      _isLoading = false;
++      notifyListeners();
++    }
++  }
++
++  Future<bool> confirm(String appointmentId) {
++    return _changeStatus(appointmentId, AppointmentStatus.confirmed);
++  }
++
++  Future<bool> complete(String appointmentId) {
++    return _changeStatus(appointmentId, AppointmentStatus.completed);
++  }
++
++  Future<bool> cancel(String appointmentId) {
++    return _changeStatus(appointmentId, AppointmentStatus.cancelled);
++  }
++
++  Future<bool> _changeStatus(
++    String appointmentId,
++    AppointmentStatus status,
++  ) async {
++    if (_isUpdating) return false;
++
++    _isUpdating = true;
++    _errorMessage = null;
++    notifyListeners();
++
++    try {
++      final updated = await _appointmentRepository.updateStatus(
++        appointmentId: appointmentId,
++        status: status,
++      );
++      final index =
++          _appointments.indexWhere((item) => item.id == appointmentId);
++      if (index >= 0) {
++        _appointments = List<Appointment>.from(_appointments)
++          ..[index] = updated;
++      } else {
++        await loadAppointments();
++      }
++      return true;
++    } on AppointmentRepositoryException catch (error) {
++      _errorMessage = error.message;
++      return false;
++    } catch (_) {
++      _errorMessage = '예약 상태 변경에 실패했습니다.';
++      return false;
++    } finally {
++      _isUpdating = false;
++      notifyListeners();
++    }
++  }
++}
+diff --git a/lib/features/home/view/home_view.dart b/lib/features/home/view/home_view.dart
+index bdf8b12..d8fb179 100644
+--- a/lib/features/home/view/home_view.dart
++++ b/lib/features/home/view/home_view.dart
+@@ -12,6 +12,7 @@ import '../../patient/view_model/patient_list_view_model.dart';
+ import '../../calendar/view_model/calendar_view_model.dart';
+ import '../../calendar/widgets/schedule_bottom_sheet.dart';
+ import '../../consultation/view_model/consultation_view_model.dart';
++import '../../appointment/view_model/appointment_view_model.dart';
+ import '../widgets/Doctor_briefing_card.dart';
+ import '../widgets/patient_status_card.dart';
+ import '../../diagnosis/diagnosis_routes.dart'; // 추가
+@@ -40,6 +41,7 @@ final class _HomeViewState extends State<HomeView> {
+     WidgetsBinding.instance.addPostFrameCallback((_) {
+       if (mounted) {
+         context.read<ConsultationViewModel>().loadReceivedRequests();
++        context.read<AppointmentViewModel>().loadAppointments();
+       }
+     });
+   }
+@@ -246,8 +248,8 @@ final class _HomeViewState extends State<HomeView> {
+     const originalVideoCount = 0;
+     const analyzedPatientCount = 0;
+ 
+-    // 예약·대기 환자 역시 실제 데이터 연결 전 임시값.
+-    const reservationCount = 0;
++    final appointmentViewModel = context.watch<AppointmentViewModel>();
++    final reservationCount = appointmentViewModel.activeTodayCount;
+     const waitingCount = 0;
+ 
+     final theme = Theme.of(context);
+@@ -264,6 +266,7 @@ final class _HomeViewState extends State<HomeView> {
+             await Future.wait([
+               patientListViewModel.refreshPatients(),
+               consultationViewModel.refreshReceivedRequests(),
++              appointmentViewModel.loadAppointments(),
+             ]);
+           },
+           child: ListView(
+@@ -280,7 +283,7 @@ final class _HomeViewState extends State<HomeView> {
+                 reservationCount: reservationCount,
+                 waitingCount: waitingCount,
+                 onReservationTap: () {
+-                  _showPreparingMessage(context);
++                  context.pushNamed('appointments');
+                 },
+                 onWaitingTap: () {
+                   _showPreparingMessage(context);
+diff --git a/lib/routes/app_router.dart b/lib/routes/app_router.dart
+index a57840b..e245bd3 100644
+--- a/lib/routes/app_router.dart
++++ b/lib/routes/app_router.dart
+@@ -7,6 +7,7 @@ import '../features/patient/patient_routes.dart';
+ import '../features/splash/view/splash_screen.dart';
+ import '../features/calendar/calendar_routes.dart';
+ import '../features/consultation/consultation_routes.dart';
++import '../features/appointment/appointment_routes.dart';
+ import '../features/diagnosis/diagnosis_routes.dart';
+ import '../features/chat/chat_routes.dart';
+ import '../features/mypage/mypage_routes.dart';
+@@ -37,6 +38,7 @@ class AppRouter {
+           ...patientRoutes,
+           ...calendarRoutes,
+           ...consultationRoutes,
++          ...appointmentRoutes,
+           ...diagnosisRoutes,
+           ...chatRoutes,
+           ...memoRoutes,
+diff --git a/test/appointment_model_test.dart b/test/appointment_model_test.dart
+new file mode 100644
+index 0000000..9a0a85b
+--- /dev/null
++++ b/test/appointment_model_test.dart
+@@ -0,0 +1,31 @@
++import 'package:doctor_app/features/appointment/model/appointment.dart';
++import 'package:flutter_test/flutter_test.dart';
++
++void main() {
++  group('Appointment.fromJson', () {
++    test('parses Django AppointmentSerializer payload', () {
++      final item = Appointment.fromJson({
++        'id': 7,
++        'patient_id': 'P-2026-HKG',
++        'patient_name': '황현경',
++        'doctor_id': 'DOC-001',
++        'doctor_name': '김순환',
++        'department': '순환기내과',
++        'scheduled_at': '2026-08-10T01:00:00Z',
++        'status': 'requested',
++        'memo': '흉통',
++        'created_at': '2026-08-05T10:00:00Z',
++        'updated_at': '2026-08-05T10:00:00Z',
++      });
++
++      expect(item.id, '7');
++      expect(item.patientId, 'P-2026-HKG');
++      expect(item.patientName, '황현경');
++      expect(item.doctorId, 'DOC-001');
++      expect(item.status, AppointmentStatus.requested);
++      expect(item.canConfirm, isTrue);
++      expect(item.canCancel, isTrue);
++      expect(item.canComplete, isFalse);
++    });
++  });
++}
+-- 
+2.43.0
+

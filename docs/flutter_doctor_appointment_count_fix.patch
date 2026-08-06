@@ -1,0 +1,28 @@
+diff --git a/lib/features/home/view/home_view.dart b/lib/features/home/view/home_view.dart
+index d8fb179..ca1eb63 100644
+--- a/lib/features/home/view/home_view.dart
++++ b/lib/features/home/view/home_view.dart
+@@ -249,7 +249,8 @@ final class _HomeViewState extends State<HomeView> {
+     const analyzedPatientCount = 0;
+ 
+     final appointmentViewModel = context.watch<AppointmentViewModel>();
+-    final reservationCount = appointmentViewModel.activeTodayCount;
++    // 목록(진행중)과 동일: 신청+확정 전체 (오늘만 세면 시차/미래예약 때 0으로 보임)
++    final reservationCount = appointmentViewModel.activeCount;
+     const waitingCount = 0;
+ 
+     final theme = Theme.of(context);
+@@ -282,8 +283,11 @@ final class _HomeViewState extends State<HomeView> {
+               PatientStatusSection(
+                 reservationCount: reservationCount,
+                 waitingCount: waitingCount,
+-                onReservationTap: () {
+-                  context.pushNamed('appointments');
++                onReservationTap: () async {
++                  await context.pushNamed('appointments');
++                  if (context.mounted) {
++                    await context.read<AppointmentViewModel>().loadAppointments();
++                  }
+                 },
+                 onWaitingTap: () {
+                   _showPreparingMessage(context);

@@ -3,6 +3,7 @@ import 'package:patient_app/core/storage/secure_storage.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
 
 import '../../auth/presentation/pages/login_page.dart';
+import 'my_info_page.dart';
 import 'security_settings_page.dart';
 
 /// 마이페이지 탭 (내정보 / 생체·자동로그인 / 알림설정)
@@ -92,7 +93,13 @@ class MyPage extends StatelessWidget {
           _MenuTile(
             icon: Icons.badge_outlined,
             title: '내 정보',
-            onTap: () => _soon(context, '내 정보'),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => MyInfoPage(patientId: patientId),
+                ),
+              );
+            },
           ),
           _MenuTile(
             icon: Icons.fingerprint_rounded,

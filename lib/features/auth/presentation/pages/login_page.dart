@@ -3,13 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:patient_app/core/storage/secure_storage.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
+import 'package:patient_app/features/auth/data/local/biometric_service.dart';
 
 import '../../../home/view/main_shell_page.dart';
 import '../../data/datasource/kakao_auth_service.dart';
+import '../../data/model/login_response.dart';
 import '../widgets/kakao_login_button.dart';
 import 'signup_page.dart';
 
-/// 환자 카카오 로그인 화면 (의료진 LoginScreen 톤에 맞춤)
+/// 환자 로그인: 아이디/비밀번호 + 카카오
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -19,8 +21,79 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final KakaoAuthService _authService = KakaoAuthService();
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
+
   bool _isLoading = false;
+  bool _obscurePassword = true;
   String? _errorMessage;
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _completeLogin(LoginResponse result) async {
+    if (result.access.isEmpty || result.refresh.isEmpty) {
+      setState(() {
+        _errorMessage = '로그인 토큰이 없습니다. 서버 응답을 확인해주세요.';
+      });
+      return;
+    }
+
+    await SecureStorageService.saveSession(
+      access: result.access,
+      refresh: result.refresh,
+      patientId: result.patientId,
+      patientName: result.patientName,
+      enableAutoLogin: true,
+    );
+    if (!mounted) return;
+
+    debugPrint(
+      'Login OK → MainShell '
+      'patient=${result.patientName}, id=${result.patientId}, '
+      'accessLen=${result.access.length}',
+    );
+
+    await _maybeOfferBiometric();
+    if (!mounted) return;
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => MainShellPage(
+          patientName: result.patientName,
+          patientId: result.patientId,
+        ),
+      ),
+      (_) => false,
+    );
+  }
+
+  Future<void> _onPasswordLoginPressed() async {
+    if (_isLoading) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final result = await _authService.loginWithPassword(
+        username: _usernameController.text,
+        password: _passwordController.text,
+      );
+      if (!mounted) return;
+      await _completeLogin(result);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _errorMessage = _userFacingMessage(e));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   Future<void> _onKakaoLoginPressed() async {
     if (_isLoading) return;
@@ -34,7 +107,7 @@ class _LoginPageState extends State<LoginPage> {
       final result = await _authService.loginWithKakao();
       if (!mounted) return;
 
-      // 신규 회원 → 회원가입 화면
+      // 신규 회원 → 병원 환자 인증(카카오 연결) 화면
       if (result.needsSignup) {
         final signupToken = result.signupToken;
         if (signupToken == null || signupToken.isEmpty) {
@@ -55,40 +128,8 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      if (result.access.isEmpty || result.refresh.isEmpty) {
-        setState(() {
-          _errorMessage = '로그인 토큰이 없습니다. 서버 응답을 확인해주세요.';
-        });
-        return;
-      }
-
-      // 기존 회원 → 토큰/프로필 저장 후 홈 (자동로그인 기본 ON)
-      await SecureStorageService.saveSession(
-        access: result.access,
-        refresh: result.refresh,
-        patientId: result.patientId,
-        patientName: result.patientName,
-        enableAutoLogin: true,
-      );
-      if (!mounted) return;
-
-      debugPrint(
-        'Login OK → MainShell '
-        'patient=${result.patientName}, id=${result.patientId}, '
-        'accessLen=${result.access.length}',
-      );
-
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (_) => MainShellPage(
-            patientName: result.patientName,
-            patientId: result.patientId,
-          ),
-        ),
-        (_) => false,
-      );
+      await _completeLogin(result);
     } on PlatformException catch (e) {
-      // 카카오 창 닫기/취소는 에러로 보여주지 않음
       if (!mounted || e.code == 'CANCELED') return;
       setState(() {
         _errorMessage = '카카오 로그인 실패\ncode=${e.code}\n${e.message}';
@@ -107,6 +148,13 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  void _openHospitalSignup() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SignupPage()),
+    );
+  }
+
   String _userFacingMessage(Object error) {
     final raw = error.toString().replaceFirst('Exception: ', '');
     if (raw.isEmpty) {
@@ -115,60 +163,182 @@ class _LoginPageState extends State<LoginPage> {
     return raw;
   }
 
+  Future<void> _maybeOfferBiometric() async {
+    try {
+      final alreadyOn = await SecureStorageService.isBiometricEnabled();
+      if (alreadyOn) return;
+
+      final available = await BiometricService().canCheckBiometrics();
+      if (!available || !mounted) return;
+
+      final enable = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('생체 인증'),
+          content: const Text(
+            '다음부터 지문/Face ID로 앱을 열까요?\n'
+            '(자동로그인은 유지됩니다)',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('나중에'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('사용'),
+            ),
+          ],
+        ),
+      );
+      if (enable == true) {
+        await SecureStorageService.setBiometricEnabled(true);
+      }
+    } catch (e) {
+      debugPrint('biometric offer skipped: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
-    final isCompact = MediaQuery.sizeOf(context).width < 360;
-
     return Scaffold(
-      backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          const Positioned.fill(child: _LoginBackground()),
+          const _LoginBackground(),
           SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                return SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(20, 24, 20, 24 + bottomInset),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight: constraints.maxHeight - 48,
+                final isCompact = constraints.maxHeight < 700;
+                return Center(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isCompact ? 20 : 28,
+                      vertical: isCompact ? 16 : 24,
                     ),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 430),
-                        child: Container(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: AppColors.white,
+                          borderRadius: BorderRadius.circular(28),
+                          border: Border.all(color: AppColors.lightBlue),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x141E3A8A),
+                              blurRadius: 28,
+                              offset: Offset(0, 14),
+                            ),
+                          ],
+                        ),
+                        child: Padding(
                           padding: EdgeInsets.symmetric(
                             horizontal: isCompact ? 22 : 30,
                             vertical: isCompact ? 26 : 34,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.white,
-                            borderRadius: BorderRadius.circular(28),
-                            border: Border.all(color: AppColors.lightBlue),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x141E3A8A),
-                                blurRadius: 28,
-                                offset: Offset(0, 14),
-                              ),
-                            ],
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               const _LoginHeader(),
-                              const SizedBox(height: 28),
+                              const SizedBox(height: 22),
                               if (_errorMessage != null) ...[
                                 _LoginMessage(message: _errorMessage!),
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 14),
                               ],
+                              TextField(
+                                controller: _usernameController,
+                                textInputAction: TextInputAction.next,
+                                enabled: !_isLoading,
+                                decoration: const InputDecoration(
+                                  labelText: '아이디 / 휴대폰번호',
+                                  hintText: '가입한 아이디 또는 010…',
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              TextField(
+                                controller: _passwordController,
+                                obscureText: _obscurePassword,
+                                textInputAction: TextInputAction.done,
+                                enabled: !_isLoading,
+                                onSubmitted: (_) => _onPasswordLoginPressed(),
+                                decoration: InputDecoration(
+                                  labelText: '비밀번호',
+                                  suffixIcon: IconButton(
+                                    onPressed: () => setState(
+                                      () =>
+                                          _obscurePassword = !_obscurePassword,
+                                    ),
+                                    icon: Icon(
+                                      _obscurePassword
+                                          ? Icons.visibility_outlined
+                                          : Icons.visibility_off_outlined,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              SizedBox(
+                                height: 48,
+                                child: FilledButton(
+                                  onPressed: _isLoading
+                                      ? null
+                                      : _onPasswordLoginPressed,
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: AppColors.primary,
+                                  ),
+                                  child: _isLoading
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Text(
+                                          '로그인',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              TextButton(
+                                onPressed:
+                                    _isLoading ? null : _openHospitalSignup,
+                                child: const Text(
+                                  '병원 환자 회원가입',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              const Row(
+                                children: [
+                                  Expanded(child: Divider()),
+                                  Padding(
+                                    padding:
+                                        EdgeInsets.symmetric(horizontal: 10),
+                                    child: Text(
+                                      '또는',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(child: Divider()),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
                               KakaoLoginButton(
                                 onPressed:
                                     _isLoading ? null : _onKakaoLoginPressed,
                                 isLoading: _isLoading,
                               ),
-                              const SizedBox(height: 20),
+                              const SizedBox(height: 18),
                               const _SecurityNotice(),
                             ],
                           ),
@@ -260,7 +430,7 @@ class _LoginHeader extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         const Text(
-          '카카오 계정으로\n심혈관 건강 관리 서비스를 이용할 수 있습니다.',
+          '병원 등록 환자만 가입할 수 있습니다.\n아이디/비밀번호 또는 카카오로 로그인하세요.',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: AppColors.textSecondary,

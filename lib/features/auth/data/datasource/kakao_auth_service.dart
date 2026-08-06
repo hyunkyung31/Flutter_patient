@@ -56,13 +56,12 @@ class KakaoAuthService implements AuthRemoteDataSource {
       try {
         return await UserApi.instance.loginWithKakaoAccount();
       } on PlatformException catch (e) {
-        // 사용자가 닫거나 리다이렉트 중 취소된 경우 — 그대로 전달
         if (e.code == 'CANCELED') rethrow;
         debugPrint('Kakao account login failed: $e');
-        throw Exception('카카오 계정 로그인 실패: $e');
+        throw Exception(_friendlyKakaoError(e));
       } catch (e) {
         debugPrint('Kakao account login failed: $e');
-        throw Exception('카카오 계정 로그인 실패: $e');
+        throw Exception(_friendlyKakaoError(e));
       }
     }
 
@@ -72,22 +71,48 @@ class KakaoAuthService implements AuthRemoteDataSource {
       // User cancelled Talk login — do not fallback.
       if (e.code == 'CANCELED') rethrow;
 
+      // keyhash 오류면 계정 로그인으로도 동일하게 실패하므로 바로 안내
+      if (_isKeyHashError(e)) {
+        throw Exception(_friendlyKakaoError(e));
+      }
+
       debugPrint('KakaoTalk login failed, falling back to account login: $e');
       try {
         return await UserApi.instance.loginWithKakaoAccount();
       } on PlatformException catch (accountError) {
         if (accountError.code == 'CANCELED') rethrow;
         debugPrint('Kakao account login failed: $accountError');
-        throw Exception('카카오 로그인 실패: $accountError');
+        throw Exception(_friendlyKakaoError(accountError));
       } catch (accountError) {
         debugPrint('Kakao account login failed: $accountError');
-        throw Exception('카카오 로그인 실패: $accountError');
+        throw Exception(_friendlyKakaoError(accountError));
       }
     } catch (e) {
       if (e is PlatformException && e.code == 'CANCELED') rethrow;
       debugPrint('KakaoTalk login failed: $e');
-      throw Exception('카카오톡 로그인 실패: $e');
+      throw Exception(_friendlyKakaoError(e));
     }
+  }
+
+  bool _isKeyHashError(Object error) {
+    final text = error.toString().toLowerCase();
+    return text.contains('keyhash') ||
+        text.contains('key hash') ||
+        text.contains('key_hash') ||
+        (text.contains('misconfigured') && text.contains('android'));
+  }
+
+  String _friendlyKakaoError(Object error) {
+    if (_isKeyHashError(error)) {
+      return '카카오 Android Key Hash가 등록되지 않았습니다.\n'
+          '이 PC/빌드의 debug keyhash를 카카오 개발자 콘솔에 추가해야 합니다.\n\n'
+          '1) Logcat에서 "KakaoKeyHash" 검색 → 해시 복사\n'
+          '2) 또는 docs/kakao_login_setup.md 의 keytool 명령 실행\n'
+          '3) developers.kakao.com → 앱 → 플랫폼 → Android → 키 해시 등록\n'
+          '   (패키지명: com.vena.patient_app)\n\n'
+          '원본: $error';
+    }
+    return '카카오 로그인 실패: $error';
   }
 
   LoginResponse _parseLoginResponse(dynamic data) {
@@ -222,6 +247,82 @@ class KakaoAuthService implements AuthRemoteDataSource {
         'status=${e.response?.statusCode}, url=$requestUrl, '
         'data=${e.response?.data}',
       );
+      throw Exception(
+        _mapDioError(e, requestUrl, actionLabel: '회원가입'),
+      );
+    }
+  }
+
+  @override
+  Future<LoginResponse> loginWithPassword({
+    required String username,
+    required String password,
+  }) async {
+    final requestUrl = '${AppConfig.apiBaseUrl}${ApiEndpoints.patientLogin}';
+    final id = username.trim();
+    if (id.isEmpty) {
+      throw Exception('아이디를 입력해주세요.');
+    }
+    if (password.isEmpty) {
+      throw Exception('비밀번호를 입력해주세요.');
+    }
+
+    try {
+      final response = await ApiClient.dio.post(
+        ApiEndpoints.patientLogin,
+        data: {
+          'username': id,
+          'password': password,
+        },
+      );
+      return _parseLoginResponse(response.data);
+    } on DioException catch (e) {
+      throw Exception(
+        _mapDioError(e, requestUrl, actionLabel: '로그인'),
+      );
+    }
+  }
+
+  @override
+  Future<LoginResponse> signupWithPassword({
+    required String name,
+    required String phone,
+    required String birthDate,
+    required String password,
+    required String username,
+  }) async {
+    final requestUrl = '${AppConfig.apiBaseUrl}${ApiEndpoints.patientSignup}';
+    final normalizedPhone = _normalizePhone(phone);
+    final normalizedBirth = _normalizeBirthDate(birthDate);
+    final normalizedName = name.trim();
+    final loginId = username.trim();
+
+    if (normalizedName.isEmpty) {
+      throw Exception('이름을 입력해주세요.');
+    }
+    if (loginId.length < 3) {
+      throw Exception('아이디는 3자 이상이어야 합니다.');
+    }
+    if (normalizedPhone.length != 11 || !normalizedPhone.startsWith('010')) {
+      throw Exception('전화번호는 010으로 시작하는 11자리여야 합니다.');
+    }
+    if (password.length < 4) {
+      throw Exception('비밀번호는 4자 이상이어야 합니다.');
+    }
+
+    try {
+      final response = await ApiClient.dio.post(
+        ApiEndpoints.patientSignup,
+        data: {
+          'name': normalizedName,
+          'phone': normalizedPhone,
+          'birthDate': normalizedBirth,
+          'password': password,
+          'username': loginId,
+        },
+      );
+      return _parseLoginResponse(response.data);
+    } on DioException catch (e) {
       throw Exception(
         _mapDioError(e, requestUrl, actionLabel: '회원가입'),
       );
