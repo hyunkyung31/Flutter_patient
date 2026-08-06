@@ -289,19 +289,19 @@ class KakaoAuthService implements AuthRemoteDataSource {
     required String phone,
     required String birthDate,
     required String password,
-    String? username,
+    required String username,
   }) async {
     final requestUrl = '${AppConfig.apiBaseUrl}${ApiEndpoints.patientSignup}';
     final normalizedPhone = _normalizePhone(phone);
     final normalizedBirth = _normalizeBirthDate(birthDate);
     final normalizedName = name.trim();
-    final loginId =
-        (username == null || username.trim().isEmpty)
-            ? normalizedPhone
-            : username.trim();
+    final loginId = username.trim();
 
     if (normalizedName.isEmpty) {
       throw Exception('이름을 입력해주세요.');
+    }
+    if (loginId.length < 3) {
+      throw Exception('아이디는 3자 이상이어야 합니다.');
     }
     if (normalizedPhone.length != 11 || !normalizedPhone.startsWith('010')) {
       throw Exception('전화번호는 010으로 시작하는 11자리여야 합니다.');

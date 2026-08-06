@@ -250,7 +250,7 @@ class _LoginPageState extends State<LoginPage> {
                                 enabled: !_isLoading,
                                 decoration: const InputDecoration(
                                   labelText: '아이디 / 휴대폰번호',
-                                  hintText: '가입 시 아이디 또는 010…',
+                                  hintText: '가입한 아이디 또는 010…',
                                 ),
                               ),
                               const SizedBox(height: 10),

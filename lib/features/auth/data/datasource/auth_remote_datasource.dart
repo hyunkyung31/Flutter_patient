@@ -22,7 +22,7 @@ abstract class AuthRemoteDataSource {
     required String phone,
     required String birthDate,
     required String password,
-    String? username,
+    required String username,
   });
 
   Future<LoginResponse> refreshToken();

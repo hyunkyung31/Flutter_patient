@@ -32,7 +32,8 @@ class PatientPasswordSignupSerializer(serializers.Serializer):
     phone = serializers.CharField()
     birthDate = serializers.CharField()
     password = serializers.CharField(write_only=True, min_length=4)
-    username = serializers.CharField(required=False, allow_blank=True)
+    # 앱 로그인 아이디 (필수). 휴대폰과 별개로 저장 → 둘 다로 로그인 가능
+    username = serializers.CharField(min_length=3, max_length=50)
 
 
 class PatientPasswordLoginSerializer(serializers.Serializer):
@@ -80,12 +81,15 @@ def patient_signup(request):
     phone = _digits_phone(serializer.validated_data["phone"])
     birth_date = serializer.validated_data["birthDate"].strip()
     password = serializer.validated_data["password"]
-    username = (serializer.validated_data.get("username") or "").strip()
-    if not username:
-        username = phone
+    username = serializer.validated_data["username"].strip()
 
     if not name:
         return Response({"message": "이름은 필수입니다."}, status=400)
+    if not username or len(username) < 3:
+        return Response(
+            {"message": "아이디는 3자 이상이어야 합니다."},
+            status=400,
+        )
     if len(phone) != 11 or not phone.startswith("010"):
         return Response(
             {"message": "전화번호는 010으로 시작하는 11자리여야 합니다."},
@@ -96,6 +100,8 @@ def patient_signup(request):
     if len(password) < 4:
         return Response({"message": "비밀번호는 4자 이상이어야 합니다."}, status=400)
 
+    # 병원 EMR에 등록된 환자만 (이름 + 전화 Exact)
+    # ※ patients.phone_number 가 NULL 이면 매칭 실패 → Heidi 전에 전화 채워야 함
     matched = list(
         Patient.objects.filter(phone_number=phone, patient_name=name)[:2]
     )

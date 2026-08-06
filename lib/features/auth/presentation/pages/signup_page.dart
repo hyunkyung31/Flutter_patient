@@ -114,7 +114,11 @@ class _SignupPageState extends State<SignupPage> {
       return;
     }
 
-    if (!widget.isKakaoLink) {
+    if not widget.isKakaoLink) {
+      if (username.length < 3) {
+        setState(() => _errorMessage = '아이디는 3자 이상 입력해주세요.');
+        return;
+      }
       if (password.length < 4) {
         setState(() => _errorMessage = '비밀번호는 4자 이상이어야 합니다.');
         return;
@@ -140,7 +144,7 @@ class _SignupPageState extends State<SignupPage> {
               phone: phoneDigits,
               birthDate: birthDate,
               password: password,
-              username: username.isEmpty ? phoneDigits : username,
+              username: username,
             );
 
       if (result.access.isEmpty || result.refresh.isEmpty) {
@@ -271,8 +275,8 @@ class _SignupPageState extends State<SignupPage> {
                 controller: _usernameController,
                 textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
-                  labelText: '아이디 (선택)',
-                  hintText: '비우면 휴대폰번호로 로그인',
+                  labelText: '아이디',
+                  hintText: '로그인에 사용할 아이디',
                 ),
               ),
               const SizedBox(height: 12),
