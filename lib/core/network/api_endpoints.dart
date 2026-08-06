@@ -14,12 +14,11 @@ class ApiEndpoints {
   static String patientDetail(String patientId) =>
       '/api/patients/$patientId/';
 
-<<<<<<< HEAD
   /// 진료 예약 (Django Appointment)
   static const String appointments = '/api/appointments/';
   static const String appointmentsMe = '/api/appointments/me/';
   static String appointmentDetail(String id) => '/api/appointments/$id/';
-=======
+
   /// 환자 AI 챗봇 (Django: path("chat/", ...))
   static const String chat = '/chat/';
 
@@ -27,5 +26,4 @@ class ApiEndpoints {
   static const String chatbotSessions = '/api/chatbot/sessions/';
   static String chatbotSessionDetail(int sessionId) =>
       '/api/chatbot/sessions/$sessionId/';
->>>>>>> 600a1bc (feat: connect home/FAB to AI chatbot with session history)
 }
