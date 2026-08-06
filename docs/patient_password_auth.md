@@ -37,10 +37,10 @@ HeidiSQL에서 테스터/본인 환자 row 업데이트:
 ```sql
 -- 예: 본인
 UPDATE patients
-SET phone_number = '01034346374'
+SET phone_number = '01000000000'
 WHERE patient_id = 'P-2026-HKG';   -- 실제 patient_id로 변경
 -- 또는
--- WHERE patient_name = '황현경';
+-- WHERE patient_name = '홍길동';
 
 -- 확인
 SELECT patient_id, patient_name, phone_number, primary_doctor_id
@@ -62,20 +62,20 @@ WHERE phone_number IS NOT NULL AND phone_number <> '';
 회원가입 body:
 ```json
 {
-  "name": "황현경",
-  "phone": "01034346374",
+  "name": "홍길동",
+  "phone": "01000000000",
   "birthDate": "1990-01-01",
-  "username": "hyunkyung",
-  "password": "pass1234"
+  "username": "demo_user",
+  "password": "REPLACE_ME"
 }
 ```
 
 로그인 body (둘 다 가능):
 ```json
-{ "username": "hyunkyung", "password": "pass1234" }
+{ "username": "demo_user", "password": "REPLACE_ME" }
 ```
 ```json
-{ "username": "01034346374", "password": "pass1234" }
+{ "username": "01000000000", "password": "REPLACE_ME" }
 ```
 
 파일: `docs/django_patient_password_auth.py` → `api/patient_password_auth.py` 로 넣고 urls 연결.
