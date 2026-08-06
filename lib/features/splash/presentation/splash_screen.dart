@@ -85,34 +85,49 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _goNext() async {
-    if (!mounted || _navigated) return;
+    if (!mounted || _navigated) {
+      return;
+    }
+
     _navigated = true;
 
-    final bool isOnboardingCompleted = await OnboardingStorage.isCompleted();
-
-    if (!mounted) {
-      return;
-    }
-
-    if (!isOnboardingCompleted) {
-      Navigator.of(
-        context,
-      ).pushReplacement(_fadeRoute(const BomiOnboardingScreen()));
-      return;
-    }
-
     try {
-      final hasTokens = await SecureStorageService.hasTokens();
-      final autoLogin = await SecureStorageService.isAutoLoginEnabled();
+      // 온보딩 테스트를 위해 저장된 완료 기록을 임시 삭제
+      await OnboardingStorage.reset();
+
+      // 온보딩 완료 여부 확인
+      final bool onboardingCompleted = await OnboardingStorage.isCompleted();
+
+      debugPrint('온보딩 초기화 후 완료 여부: $onboardingCompleted');
+
+      if (!mounted) {
+        return;
+      }
+
+      if (!onboardingCompleted) {
+        Navigator.of(
+          context,
+        ).pushReplacement(_fadeRoute(const BomiOnboardingScreen()));
+        return;
+      }
+
+      // 3. 온보딩을 완료한 경우 기존 자동 로그인 확인
+      final bool hasTokens = await SecureStorageService.hasTokens();
+
+      final bool autoLogin = await SecureStorageService.isAutoLoginEnabled();
 
       if (hasTokens && autoLogin) {
-        final biometricOn = await SecureStorageService.isBiometricEnabled();
+        final bool biometricOn =
+            await SecureStorageService.isBiometricEnabled();
+
         if (biometricOn) {
-          final canBio = await _biometric.canCheckBiometrics();
+          final bool canBio = await _biometric.canCheckBiometrics();
+
           if (canBio) {
-            final ok = await _biometric.authenticate(
+            final bool ok = await _biometric.authenticate(
               reason: '자동로그인을 위해 생체인증을 진행합니다.',
             );
+
             if (!ok) {
               _openLogin();
               return;
@@ -120,16 +135,27 @@ class _SplashScreenState extends State<SplashScreen>
           }
         }
 
-        final name = await SecureStorageService.getPatientName();
-        final patientId = await SecureStorageService.getPatientId();
-        if (!mounted) return;
+        final String? name = await SecureStorageService.getPatientName();
+
+        final String? patientId = await SecureStorageService.getPatientId();
+
+        if (!mounted) {
+          return;
+        }
+
         Navigator.of(context).pushReplacement(
           _fadeRoute(MainShellPage(patientName: name, patientId: patientId)),
         );
+
         return;
       }
-    } catch (_) {
-      // fallthrough → login
+    } catch (error, stackTrace) {
+      debugPrint('스플래시 이동 오류: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+
+    if (!mounted) {
+      return;
     }
 
     _openLogin();
