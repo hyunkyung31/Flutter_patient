@@ -5,8 +5,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/storage_keys.dart';
 import '../model/reservation.dart';
 
-/// 예약 API가 아직 없으므로 로컬 저장으로 먼저 동작.
-/// 나중에 Dio 기반 RemoteRepository로 교체하면 됨.
+/// 레거시 로컬 저장소. 서버 Appointment API 연동 후 사용하지 않음.
+/// (오프라인/마이그레이션 참고용으로만 유지)
+@Deprecated('Use ReservationRemoteRepository')
 class ReservationLocalRepository {
   Future<List<Reservation>> fetchAll() async {
     final prefs = await SharedPreferences.getInstance();
@@ -35,11 +36,13 @@ class ReservationLocalRepository {
     required String department,
     required String doctorName,
     required DateTime dateTime,
+    String doctorId = '',
     String? memo,
   }) async {
     final now = DateTime.now();
     final item = Reservation(
       id: 'rsv_${now.millisecondsSinceEpoch}',
+      doctorId: doctorId,
       department: department,
       doctorName: doctorName,
       dateTime: dateTime,

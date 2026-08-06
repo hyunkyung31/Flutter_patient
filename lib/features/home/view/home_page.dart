@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:patient_app/core/theme/app_colors.dart';
 
 import '../../health_rewards/services/step_counter_service.dart';
+import '../../reservation/model/reservation.dart';
+import '../../reservation/repository/reservation_remote_repository.dart';
 import 'package:patient_app/features/ai_consultation/widgets/ai_consultation_preview.dart';
 
 // 시간대별 이미지 선택 함수
@@ -291,11 +293,41 @@ class _WelcomeCardState extends State<_WelcomeCard> {
   }
 }
 
-class _SummaryCards extends StatelessWidget {
+class _SummaryCards extends StatefulWidget {
   const _SummaryCards({this.onReservation, this.onExamHistory});
 
   final VoidCallback? onReservation;
   final VoidCallback? onExamHistory;
+
+  @override
+  State<_SummaryCards> createState() => _SummaryCardsState();
+}
+
+class _SummaryCardsState extends State<_SummaryCards> {
+  late Future<Reservation?> _nextReservation;
+
+  @override
+  void initState() {
+    super.initState();
+    _nextReservation = _loadNext();
+  }
+
+  Future<Reservation?> _loadNext() async {
+    try {
+      final list = await ReservationRemoteRepository().fetchAll();
+      final now = DateTime.now();
+      final upcoming = list.where((e) {
+        final active = e.status == ReservationStatus.requested ||
+            e.status == ReservationStatus.confirmed;
+        return active && e.dateTime.isAfter(now.subtract(const Duration(hours: 1)));
+      }).toList()
+        ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      if (upcoming.isEmpty) return null;
+      return upcoming.first;
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -303,14 +335,24 @@ class _SummaryCards extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: _SummaryCard(
-            title: '다음 예약',
-            icon: Icons.event_available_outlined,
-            subtitle: '아직 예정된 예약이 없어요.',
-            actionLabel: '예약하기',
-            actionColor: AppColors.lightBlue,
-            actionTextColor: AppColors.primary,
-            onTap: onReservation,
+          child: FutureBuilder<Reservation?>(
+            future: _nextReservation,
+            builder: (context, snap) {
+              final next = snap.data;
+              final subtitle = next == null
+                  ? '아직 예정된 예약이 없어요.'
+                  : '${DateFormat('M/d HH:mm').format(next.dateTime)}\n'
+                      '${next.department} · ${next.doctorName}';
+              return _SummaryCard(
+                title: '다음 예약',
+                icon: Icons.event_available_outlined,
+                subtitle: subtitle,
+                actionLabel: next == null ? '예약하기' : '예약 보기',
+                actionColor: AppColors.lightBlue,
+                actionTextColor: AppColors.primary,
+                onTap: widget.onReservation,
+              );
+            },
           ),
         ),
         const SizedBox(width: 10),
@@ -322,7 +364,7 @@ class _SummaryCards extends StatelessWidget {
             actionLabel: '검사이력',
             actionColor: const Color(0xFFF1F5F9),
             actionTextColor: AppColors.text,
-            onTap: onExamHistory,
+            onTap: widget.onExamHistory,
           ),
         ),
       ],
