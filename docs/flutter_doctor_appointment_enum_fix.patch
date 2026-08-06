@@ -1,0 +1,9 @@
+diff --git a/lib/features/appointment/view/appointment_list_view.dart b/lib/features/appointment/view/appointment_list_view.dart
+--- a/lib/features/appointment/view/appointment_list_view.dart
++++ b/lib/features/appointment/view/appointment_list_view.dart
+@@ -229,4 +229,4 @@ final class _AppointmentCard extends StatelessWidget {
+   }
+ }
+ 
+-enum _AppointmentFilter { active, requested, confirmed, all }
++enum _AppointmentFilter { scheduled, completed }
